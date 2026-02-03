@@ -41,7 +41,7 @@ async function getBTC() {
     throw new Error("btc api fail");
   }
   const json = JSON.parse(text);
-  return { usd: Number(json.usd), chg: Number(json.chg) };
+  return { usd: Number(json.usd), chg: json.chg === null ? null : Number(json.chg) };
 }
 
 async function getChart() {
