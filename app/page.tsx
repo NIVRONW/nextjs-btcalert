@@ -102,24 +102,45 @@ export default function Home() {
         >
           {status === "loading" && <p>Cargando precio y gráfico…</p>}
 
-          {status === "error" && (
-            <div>
-              <p style={{ color: "#fca5a5" }}>No se pudo cargar. Reintenta.</p>
-              <button
-                onClick={refresh}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
+{status === "error" && (
+  <div>
+    <p style={{ color: "#fca5a5" }}>No se pudo cargar. (ver detalle abajo)</p>
+
+    <div
+      style={{
+        marginTop: 10,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid #334155",
+        background: "#0b1220",
+        fontSize: 12,
+        whiteSpace: "pre-wrap",
+        opacity: 0.9,
+      }}
+    >
+      {String((globalThis as any).__LAST_ERR__ ?? "Sin detalle aún")}
+      {"\n"}
+      Prueba estas rutas:
+      {"\n"}- /api/btc
+      {"\n"}- /api/btc-chart
+    </div>
+
+    <button
+      onClick={refresh}
+      style={{
+        marginTop: 12,
+        padding: "10px 14px",
+        borderRadius: 12,
+        border: "1px solid #334155",
+        background: "#111827",
+        color: "#e5e7eb",
+        cursor: "pointer",
+      }}
+    >
+      Reintentar
+    </button>
+  </div>
+)}
 
           {status === "ok" && price != null && chg24 != null && (
             <>
