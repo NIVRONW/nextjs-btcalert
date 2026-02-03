@@ -2,7 +2,6 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    // Coinbase spot (sin auth)
     const url = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
 
     const res = await fetch(url, {
@@ -26,8 +25,7 @@ export async function GET() {
       return Response.json({ error: "bad_data" }, { status: 502 });
     }
 
-    // Coinbase spot no trae % 24h, así que aquí devolvemos chg=null
-    return Response.json({ usd: amount, chg: null }, { status: 200 });
+    return Response.json({ usd: amount }, { status: 200 });
   } catch (e: any) {
     return Response.json(
       { error: "server_error", message: e?.message ?? String(e) },
