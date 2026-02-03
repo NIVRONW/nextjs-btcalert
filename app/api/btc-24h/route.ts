@@ -2,9 +2,14 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    // Kraken Ticker 24h
+    // Kraken Ticker 24h (público)
     const url = "https://api.kraken.com/0/public/Ticker?pair=XBTUSD";
-    const res = await fetch(url, { cache: "no-store" });
+
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers: { accept: "application/json" },
+    });
+
     const text = await res.text();
 
     if (!res.ok) {
@@ -16,10 +21,12 @@ export async function GET() {
 
     const json = JSON.parse(text);
     const result = json?.result;
-    const key = result ? Object.keys(result)[0] : null;
+
+    // La key dentro de result puede variar (ej: XXBTZUSD), tomamos la primera
+    const key = result ? Object.keys(result).find((k) => k !== "last") : null;
     const t = key ? result[key] : null;
 
-    // c[0] = last trade price, o[0] = today's opening price
+    // c[0] = last trade price, o[0] = opening price (hace ~24h)
     const last = Number(t?.c?.[0]);
     const open = Number(t?.o?.[0]);
 
@@ -28,12 +35,12 @@ export async function GET() {
     }
 
     const chg = ((last - open) / open) * 100;
+
     return Response.json({ chg }, { status: 200 });
   } catch (e: any) {
     return Response.json(
-      { error: "server_error", message: e?.message ?? String(e) },
+      { error: "server_error", name: e?.name ?? null, message: e?.message ?? String(e) },
       { status: 500 }
     );
   }
 }
-
