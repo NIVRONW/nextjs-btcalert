@@ -165,8 +165,11 @@ export default function Home() {
   </div>
 )}
 
-          {status === "ok" && price != null && chg24 != null && (
-            <>
+          {status === "ok" && price != null && (
+  <>
+    ...
+  </>
+)}
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
                 <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
                 <div style={{ fontSize: 16 }}>
