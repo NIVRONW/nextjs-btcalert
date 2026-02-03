@@ -13,14 +13,15 @@ export async function GET() {
 
     if (!res.ok) {
       return Response.json(
-        { error: "upstream_error", status: res.status },
+        { error: "upstream_error", status: res.status, body: text.slice(0, 200) },
         { status: 502 }
       );
     }
 
     const json = JSON.parse(text);
     const result = json?.result;
-    const key = result ? Object.keys(result)[0] : null;
+
+    const key = result ? Object.keys(result).find((k) => k !== "last") : null;
     const t = key ? result[key] : null;
 
     const last = Number(t?.c?.[0]);
@@ -31,7 +32,6 @@ export async function GET() {
     }
 
     const chg = ((last - open) / open) * 100;
-
     return Response.json({ chg }, { status: 200 });
   } catch (e: any) {
     return Response.json(
