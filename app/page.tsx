@@ -35,18 +35,29 @@ function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
 
 async function getBTC() {
   const res = await fetch("/api/btc", { cache: "no-store" });
-  if (!res.ok) throw new Error("btc api fail");
-  const json = await res.json();
+  const text = await res.text().catch(() => "");
+  if (!res.ok) {
+    (globalThis as any).__LAST_ERR__ = `/api/btc -> ${res.status}\n${text}`;
+    throw new Error("btc api fail");
+  }
+  const json = JSON.parse(text);
   return { usd: Number(json.usd), chg: Number(json.chg) };
 }
 
 async function getChart() {
   const res = await fetch("/api/btc-chart", { cache: "no-store" });
-  if (!res.ok) throw new Error("chart api fail");
-  const json = await res.json();
+  const text = await res.text().catch(() => "");
+  if (!res.ok) {
+    (globalThis as any).__LAST_ERR__ = `/api/btc-chart -> ${res.status}\n${text}`;
+    throw new Error("chart api fail");
+  }
+  const json = JSON.parse(text);
   const prices: [number, number][] = json?.prices;
-  if (!Array.isArray(prices) || prices.length < 10) throw new Error("bad series");
-  return prices.map(([t, p]) => ({ t, p })) as MarketPoint[];
+  if (!Array.isArray(prices) || prices.length < 10) {
+    (globalThis as any).__LAST_ERR__ = `Serie inválida: ${text}`;
+    throw new Error("bad series");
+  }
+  return prices.map(([t, p]) => ({ t, p })) as { t: number; p: number }[];
 }
 
 export default function Home() {
