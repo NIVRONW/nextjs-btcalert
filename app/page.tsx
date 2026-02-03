@@ -63,6 +63,15 @@ async function getChart() {
   return prices.map(([t, p]) => ({ t, p })) as { t: number; p: number }[];
 }
 
+
+async function get24h() {
+  const res = await fetch("/api/btc-24h", { cache: "no-store" });
+  if (!res.ok) throw new Error("24h api fail");
+  const json = await res.json();
+  return Number(json.chg);
+}
+
+
 export default function Home() {
   const [price, setPrice] = useState<number | null>(null);
   const [chg24, setChg24] = useState<number | null>(null);
