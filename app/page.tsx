@@ -73,9 +73,9 @@ export default function Home() {
   async function refresh() {
     try {
       setStatus("loading");
-      const [p, s] = await Promise.all([getBTC(), getChart()]);
+      const [p, s, chg] = await Promise.all([getBTC(), getChart(), get24h()]);
       setPrice(p.usd);
-      setChg24(p.chg);
+      setChg24(chg);
       setSeries(s);
       setUpdatedAt(new Date().toLocaleString());
       setStatus("ok");
