@@ -41,8 +41,11 @@ async function getBTC() {
     throw new Error("btc api fail");
   }
   const json = JSON.parse(text);
-  return { usd: Number(json.usd), chg: json.chg === null ? null : Number(json.chg) };
+  const usd = Number(json.usd);
+  const chg = json.chg === null ? null : Number(json.chg);
+  return { usd, chg };
 }
+
 
 async function getChart() {
   const res = await fetch("/api/btc-chart", { cache: "no-store" });
