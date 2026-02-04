@@ -10,7 +10,6 @@ export async function GET() {
     });
 
     const text = await res.text();
-
     if (!res.ok) {
       return Response.json(
         { error: "upstream_error", status: res.status, body: text.slice(0, 200) },
@@ -28,17 +27,15 @@ export async function GET() {
       return Response.json({ error: "bad_series" }, { status: 502 });
     }
 
-    // Formato: [time_ms, close]
-    const prices: [number, number][] = ohlc
-      .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
-      .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p));
-
-    // Quedarnos solo con últimas 24h (aprox)
     const end = Date.now();
     const start = end - 24 * 60 * 60 * 1000;
-    const last24 = prices.filter(([t]) => t >= start && t <= end);
 
-    return Response.json({ prices: last24.length ? last24 : prices }, { status: 200 });
+    const prices: [number, number][] = ohlc
+      .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
+      .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p))
+      .filter(([t]) => t >= start && t <= end);
+
+    return Response.json({ prices }, { status: 200 });
   } catch (e: any) {
     return Response.json(
       { error: "server_error", message: e?.message ?? String(e) },
