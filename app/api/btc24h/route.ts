@@ -10,7 +10,6 @@ export async function GET() {
     });
 
     const text = await res.text();
-
     if (!res.ok) {
       return Response.json(
         { error: "upstream_error", status: res.status, body: text.slice(0, 200) },
@@ -20,7 +19,6 @@ export async function GET() {
 
     const json = JSON.parse(text);
     const result = json?.result;
-
     const key = result ? Object.keys(result).find((k) => k !== "last") : null;
     const t = key ? result[key] : null;
 
@@ -40,4 +38,3 @@ export async function GET() {
     );
   }
 }
-
