@@ -28,45 +28,15 @@ function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
     h - pad - ((y - minY) / Math.max(1, maxY - minY)) * (h - pad * 2);
 
   return points
-    .map(
-      (d, i) =>
-        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`
-    )
+    .map((d, i) => `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`)
     .join(" ");
 }
 
-async function getBTC() {
-  const res = await fetch("/api/btc", { cache: "no-store" });
+async function fetchJSON(url: string) {
+  const res = await fetch(url, { cache: "no-store" });
   const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`/api/btc -> ${res.status}: ${text}`);
-  const json = JSON.parse(text);
-  const usd = Number(json.usd);
-  if (!Number.isFinite(usd)) throw new Error("BTC usd inválido");
-  return usd;
-}
-
-async function getChart() {
-  const res = await fetch("/api/btc-chart", { cache: "no-store" });
-  const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`/api/btc-chart -> ${res.status}: ${text}`);
-  const json = JSON.parse(text);
-
-  const prices: [number, number][] = json?.prices;
-  if (!Array.isArray(prices) || prices.length < 10) throw new Error("Serie inválida");
-
-  return prices
-    .map(([t, p]) => ({ t: Number(t), p: Number(p) }))
-    .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p)) as MarketPoint[];
-}
-
-async function get24h() {
-  // Usamos el endpoint SIN guion para evitar tu 404
-  const res = await fetch("/api/btc24h", { cache: "no-store" });
-  const text = await res.text().catch(() => "");
-  if (!res.ok) return null;
-  const json = JSON.parse(text);
-  const chg = Number(json?.chg);
-  return Number.isFinite(chg) ? chg : null;
+  if (!res.ok) throw new Error(`${url} -> ${res.status}: ${text}`);
+  return JSON.parse(text);
 }
 
 export default function Home() {
@@ -74,18 +44,41 @@ export default function Home() {
   const [price, setPrice] = useState<number | null>(null);
   const [chg24, setChg24] = useState<number | null>(null);
   const [series, setSeries] = useState<MarketPoint[]>([]);
-  const [updatedAt, setUpdatedAt] = useState<string>("");
-  const [debug, setDebug] = useState<string>("");
+  const [updatedAt, setUpdatedAt] = useState("");
+  const [debug, setDebug] = useState("");
 
   async function refresh() {
     try {
       setStatus("loading");
       setDebug("");
 
-      const [usd, s, chg] = await Promise.all([getBTC(), getChart(), get24h()]);
+      const [btc, chart, c24] = await Promise.all([
+        fetchJSON("/api/btc"),
+        fetchJSON("/api/btc-chart"),
+        // si aún no existe, no rompemos
+        (async () => {
+          try {
+            return await fetchJSON("/api/btc24h");
+          } catch {
+            return { chg: null };
+          }
+        })(),
+      ]);
+
+      const usd = Number(btc?.usd);
+      const chg = c24?.chg === null ? null : Number(c24?.chg);
+
+      const prices: [number, number][] = chart?.prices;
+      const pts = Array.isArray(prices)
+        ? prices.map(([t, p]) => ({ t: Number(t), p: Number(p) })).filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p))
+        : [];
+
+      if (!Number.isFinite(usd)) throw new Error("Precio inválido");
+      if (!pts.length) throw new Error("No llegó serie de gráfico");
+
       setPrice(usd);
-      setSeries(s);
-      setChg24(chg);
+      setChg24(Number.isFinite(chg as any) ? (chg as number) : null);
+      setSeries(pts);
 
       setUpdatedAt(new Date().toLocaleString());
       setStatus("ok");
@@ -97,7 +90,7 @@ export default function Home() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 60_000); // 1 minuto
+    const id = setInterval(refresh, 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -105,56 +98,22 @@ export default function Home() {
   const changeColor = (chg24 ?? 0) >= 0 ? "#22c55e" : "#ef4444";
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        padding: 18,
-        background: "#0b0f19",
-        color: "#e5e7eb",
-        fontFamily: "system-ui",
-      }}
-    >
+    <main style={{ minHeight: "100vh", padding: 18, background: "#0b0f19", color: "#e5e7eb", fontFamily: "system-ui" }}>
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
         <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
 
-        <div
-          style={{
-            border: "1px solid #1f2937",
-            borderRadius: 16,
-            padding: 16,
-            background: "#0f172a",
-          }}
-        >
+        <div style={{ border: "1px solid #1f2937", borderRadius: 16, padding: 16, background: "#0f172a" }}>
           {status === "loading" && <p>Cargando precio y gráfico…</p>}
 
           {status === "error" && (
             <div>
               <p style={{ color: "#fca5a5" }}>No se pudo cargar. Reintenta.</p>
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#0b1220",
-                  fontSize: 12,
-                  whiteSpace: "pre-wrap",
-                  opacity: 0.9,
-                }}
-              >
+              <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #334155", background: "#0b1220", fontSize: 12, whiteSpace: "pre-wrap", opacity: 0.9 }}>
                 {debug || "Sin detalle"}
               </div>
               <button
                 onClick={refresh}
-                style={{
-                  marginTop: 12,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
+                style={{ marginTop: 12, padding: "10px 14px", borderRadius: 12, border: "1px solid #334155", background: "#111827", color: "#e5e7eb", cursor: "pointer" }}
               >
                 Reintentar
               </button>
@@ -185,26 +144,14 @@ export default function Home() {
 
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Últimas 24h</div>
-                {series.length ? (
-                  <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
-                    <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
-                  </svg>
-                ) : (
-                  <p style={{ opacity: 0.8 }}>Sin datos de gráfico todavía…</p>
-                )}
+                <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
+                  <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
+                </svg>
               </div>
 
               <button
                 onClick={refresh}
-                style={{
-                  marginTop: 10,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
+                style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12, border: "1px solid #334155", background: "#111827", color: "#e5e7eb", cursor: "pointer" }}
               >
                 Actualizar ahora
               </button>
