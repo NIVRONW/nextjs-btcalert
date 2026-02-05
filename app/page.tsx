@@ -115,10 +115,6 @@ export default function Home() {
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
         <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
 
-        <p style={{ opacity: 0.7, fontSize: 12, marginTop: 0 }}>
-  Build Test 🚀
-</p>
-
         <div
           style={{
             border: "1px solid #1f2937",
