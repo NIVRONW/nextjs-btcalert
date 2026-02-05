@@ -13,6 +13,10 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
+
+<p style={{ opacity: 0.6, fontSize: 12 }}>Build: test</p>
+
+
 function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
   const xs = points.map((d) => d.t);
   const ys = points.map((d) => d.p);
