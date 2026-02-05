@@ -13,7 +13,6 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
-
 function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
   const xs = points.map((d) => d.t);
   const ys = points.map((d) => d.p);
@@ -29,7 +28,10 @@ function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
     h - pad - ((y - minY) / Math.max(1, maxY - minY)) * (h - pad * 2);
 
   return points
-    .map((d, i) => `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`)
+    .map(
+      (d, i) =>
+        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`
+    )
     .join(" ");
 }
 
@@ -71,7 +73,9 @@ export default function Home() {
 
       const prices: [number, number][] = chart?.prices;
       const pts = Array.isArray(prices)
-        ? prices.map(([t, p]) => ({ t: Number(t), p: Number(p) })).filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p))
+        ? prices
+            .map(([t, p]) => ({ t: Number(t), p: Number(p) }))
+            .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p))
         : [];
 
       if (!Number.isFinite(usd)) throw new Error("Precio inválido");
@@ -99,22 +103,56 @@ export default function Home() {
   const changeColor = (chg24 ?? 0) >= 0 ? "#22c55e" : "#ef4444";
 
   return (
-    <main style={{ minHeight: "100vh", padding: 18, background: "#0b0f19", color: "#e5e7eb", fontFamily: "system-ui" }}>
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: 18,
+        background: "#0b0f19",
+        color: "#e5e7eb",
+        fontFamily: "system-ui",
+      }}
+    >
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
         <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
 
-        <div style={{ border: "1px solid #1f2937", borderRadius: 16, padding: 16, background: "#0f172a" }}>
+        <div
+          style={{
+            border: "1px solid #1f2937",
+            borderRadius: 16,
+            padding: 16,
+            background: "#0f172a",
+          }}
+        >
           {status === "loading" && <p>Cargando precio y gráfico…</p>}
 
           {status === "error" && (
             <div>
               <p style={{ color: "#fca5a5" }}>No se pudo cargar. Reintenta.</p>
-              <div style={{ marginTop: 10, padding: 12, borderRadius: 12, border: "1px solid #334155", background: "#0b1220", fontSize: 12, whiteSpace: "pre-wrap", opacity: 0.9 }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: "1px solid #334155",
+                  background: "#0b1220",
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  opacity: 0.9,
+                }}
+              >
                 {debug || "Sin detalle"}
               </div>
               <button
                 onClick={refresh}
-                style={{ marginTop: 12, padding: "10px 14px", borderRadius: 12, border: "1px solid #334155", background: "#111827", color: "#e5e7eb", cursor: "pointer" }}
+                style={{
+                  marginTop: 12,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #334155",
+                  background: "#111827",
+                  color: "#e5e7eb",
+                  cursor: "pointer",
+                }}
               >
                 Reintentar
               </button>
@@ -123,8 +161,17 @@ export default function Home() {
 
           {status === "ok" && price != null && (
             <>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
-                <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 16,
+                  flexWrap: "wrap",
+                  alignItems: "baseline",
+                }}
+              >
+                <div style={{ fontSize: 42, fontWeight: 800 }}>
+                  {formatUSD(price)}
+                </div>
 
                 <div style={{ fontSize: 16 }}>
                   Cambio 24h:{" "}
@@ -144,7 +191,9 @@ export default function Home() {
               </div>
 
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Últimas 24h</div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
+                  Últimas 24h
+                </div>
                 <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
                   <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
                 </svg>
@@ -152,10 +201,23 @@ export default function Home() {
 
               <button
                 onClick={refresh}
-                style={{ marginTop: 10, padding: "10px 14px", borderRadius: 12, border: "1px solid #334155", background: "#111827", color: "#e5e7eb", cursor: "pointer" }}
+                style={{
+                  marginTop: 10,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid #334155",
+                  background: "#111827",
+                  color: "#e5e7eb",
+                  cursor: "pointer",
+                }}
               >
                 Actualizar ahora
               </button>
+
+              {/* 👇 Línea de prueba para confirmar que Vercel está desplegando tu último commit */}
+              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>
+                Build Test 🚀
+              </p>
             </>
           )}
         </div>
