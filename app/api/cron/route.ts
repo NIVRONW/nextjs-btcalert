@@ -17,10 +17,6 @@ type SignalPayload = {
   reason: string[];
 };
 
-/* =========================
-   INDICADORES
-========================= */
-
 function ema(values: number[], period: number) {
   const k = 2 / (period + 1);
   let e = values[0];
@@ -30,16 +26,13 @@ function ema(values: number[], period: number) {
 
 function rsi(values: number[], period = 14) {
   if (values.length < period + 1) return 50;
-
-  let gains = 0;
-  let losses = 0;
-
+  let gains = 0,
+    losses = 0;
   for (let i = values.length - period; i < values.length; i++) {
     const diff = values[i] - values[i - 1];
     if (diff >= 0) gains += diff;
     else losses += Math.abs(diff);
   }
-
   const avgGain = gains / period;
   const avgLoss = losses / period || 1e-9;
   const rs = avgGain / avgLoss;
@@ -51,29 +44,29 @@ function pct(from: number, to: number) {
   return ((to - from) / from) * 100;
 }
 
-/* =========================
-   FETCH PRECIOS
-========================= */
-
 async function fetchPrices24h_5m(): Promise<[number, number][]> {
   const url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=5";
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
 
-  const res = await fetch(url, { cache: "no-store" });
-  const json = await res.json();
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
 
+  const json = JSON.parse(text);
   const result = json?.result;
-  const keys = result ? Object.keys(result).filter((k) => k !== "last") : [];
-  const ohlc = keys.length ? result[keys[0]] : null;
+  const keys = result ? Object.keys(result).filter((k: string) => k !== "last") : [];
+  const firstKey = keys[0];
+  const ohlc = firstKey ? result[firstKey] : null;
 
-  if (!Array.isArray(ohlc) || ohlc.length < 200) {
-    throw new Error("bad_series");
-  }
+  if (!Array.isArray(ohlc) || ohlc.length < 220) throw new Error("bad_series");
 
   const end = Date.now();
   const start = end - 24 * 60 * 60 * 1000;
 
   const prices: [number, number][] = ohlc
-    .map((row: any[]) => [Number(row[0]) * 1000, Number(row[4])] as [number, number])
+    .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
     .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p))
     .filter(([t]) => t >= start && t <= end);
 
@@ -81,13 +74,10 @@ async function fetchPrices24h_5m(): Promise<[number, number][]> {
   return prices;
 }
 
-/* =========================
-   AUTH
-========================= */
-
 function authOk(req: Request) {
   const secret = (process.env.CRON_SECRET ?? "").trim();
   const authRaw = (req.headers.get("authorization") ?? "").trim();
+
   const token = authRaw.toLowerCase().startsWith("bearer ")
     ? authRaw.slice(7).trim()
     : "";
@@ -95,16 +85,21 @@ function authOk(req: Request) {
   return secret.length > 0 && token === secret;
 }
 
-/* =========================
-   TELEGRAM (HTML MODE)
-========================= */
+// Escapa HTML para que Telegram no rompa si hay símbolos raros
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
-async function sendTelegram(html: string) {
+async function sendTelegramHTML(html: string) {
   const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
   const chatId = (process.env.TELEGRAM_CHAT_ID ?? "").trim();
   if (!token || !chatId) return;
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -114,11 +109,12 @@ async function sendTelegram(html: string) {
       disable_web_page_preview: true,
     }),
   });
-}
 
-/* =========================
-   CRON
-========================= */
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Telegram error: ${body.slice(0, 200)}`);
+  }
+}
 
 export async function POST(req: Request) {
   if (!authOk(req)) {
@@ -132,6 +128,10 @@ export async function POST(req: Request) {
     const series = await fetchPrices24h_5m();
     const closes = series.map(([, p]) => p);
     const last = closes[closes.length - 1];
+
+    if (closes.length < 210) {
+      return NextResponse.json({ ok: false, error: "not_enough_data" }, { status: 500 });
+    }
 
     const rsi14 = rsi(closes, 14);
     const ema50 = ema(closes.slice(-120), 50);
@@ -150,24 +150,44 @@ export async function POST(req: Request) {
     let score = 0;
     const reason: string[] = [];
 
-    if (rsi14 < 30) {
+    if (rsi14 < 25) {
+      score += 45;
+      reason.push("RSI<25 (muy sobrevendido)");
+    } else if (rsi14 < 30) {
       score += 35;
-      reason.push("RSI en sobreventa");
+      reason.push("RSI<30 (sobrevendido)");
+    } else if (rsi14 < 35) {
+      score += 20;
+      reason.push("RSI<35 (debilidad)");
     }
 
     if (change24h <= -3) {
       score += 25;
-      reason.push("Caida fuerte en 24h");
+      reason.push("Caida 24h >= 3%");
+    }
+    if (change1h <= -1.5) {
+      score += 20;
+      reason.push("Caida 1h >= 1.5%");
     }
 
     if (rebound2h >= 0.3) {
       score += 15;
-      reason.push("Rebote confirmado");
+      reason.push("Rebote >= 0.3% desde minimo 2h");
+    } else {
+      score -= 10;
+      reason.push("Sin rebote (evitar caida libre)");
     }
 
+    if (last >= ema50) {
+      score += 5;
+      reason.push("Precio >= EMA50");
+    }
     if (last >= ema200) {
-      score += 10;
-      reason.push("Precio sobre tendencia mayor");
+      score += 5;
+      reason.push("Precio >= EMA200");
+    } else {
+      score -= 5;
+      reason.push("Precio < EMA200 (tendencia debil)");
     }
 
     const verdict = score >= 70;
@@ -188,28 +208,31 @@ export async function POST(req: Request) {
 
     setSignal(payload);
 
-    const shouldSendReal = verdict && score >= 80;
+    // ✅ ENVÍO REAL: verdict true y score >= 80
+    // ✅ ENVÍO PRUEBA: force=1
+    const shouldSend = (verdict && score >= 80) || force;
 
-    if (shouldSendReal || force) {
+    if (shouldSend) {
+      // ✅ En force también mostramos el headline real para que lo puedas probar
       const headline = force
-        ? "🧪 PRUEBA DE ALERTA"
+        ? "🧪 PRUEBA (formato real)"
         : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
 
-      const when = new Date(payload.at).toLocaleString("en-US", {
+      const when = new Date(payload.at).toLocaleString("es-US", {
         timeZone: "America/New_York",
         hour12: true,
       });
 
-      const topReasons = (payload.reason || []).slice(0, 4);
+      const topReasons = (payload.reason || []).slice(0, 4).map(escapeHtml);
 
       const html =
-        `<b>${headline}</b>\n\n` +
-        `<b>Hora:</b> ${when}\n` +
+        `<b>${escapeHtml(headline)}</b>\n` +
+        `<b>Hora:</b> ${escapeHtml(when)}\n\n` +
         `<b>Precio Actual:</b> $${payload.price.toFixed(2)}\n\n` +
         `<b>Motivos:</b>\n` +
-        `${topReasons.map((r) => `• ${r}`).join("\n")}`;
+        topReasons.map((r) => `• ${r}`).join("\n");
 
-      await sendTelegram(html);
+      await sendTelegramHTML(html);
     }
 
     return NextResponse.json({ ok: true, ...payload });
