@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { setSignal } from "@/app/lib/signalStore";
 
-type Candle = { t: number; o: number; h: number; l: number; c: number };
+export const runtime = "nodejs";
 
 function ema(values: number[], period: number) {
   const k = 2 / (period + 1);
@@ -18,30 +19,56 @@ function rsi(values: number[], period = 14) {
     else losses += Math.abs(diff);
   }
   const avgGain = gains / period;
-  const avgLoss = losses / period || 1e-9;
+  const avgLoss = (losses / period) || 1e-9;
   const rs = avgGain / avgLoss;
   return 100 - 100 / (1 + rs);
 }
 
-// drawdown desde max a min (negativo)
-function pct(a: number, b: number) {
-  return ((b - a) / a) * 100;
+function pct(from: number, to: number) {
+  return ((to - from) / from) * 100;
 }
 
-async function fetchCandles(): Promise<Candle[]> {
-  // 🔁 Ajusta tu fuente actual de velas (la que ya usas para el gráfico).
-  // Debe devolver al menos 240 velas de 1m (4h) o 300 velas de 5m.
-  // Placeholder: usa tu endpoint existente:
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/market/candles`, { cache: "no-store" });
-  if (!res.ok) throw new Error("No pude leer candles");
-  return res.json();
+async function fetchPrices24h_5m(): Promise<[number, number][]> {
+  const url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=5";
+  const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
+
+  const json = JSON.parse(text);
+  const result = json?.result;
+  const keys = result ? Object.keys(result).filter((k: string) => k !== "last") : [];
+  const firstKey = keys[0];
+  const ohlc = firstKey ? result[firstKey] : null;
+
+  if (!Array.isArray(ohlc) || ohlc.length < 220) {
+    throw new Error("bad_series");
+  }
+
+  const end = Date.now();
+  const start = end - 24 * 60 * 60 * 1000;
+
+  const prices: [number, number][] = ohlc
+    .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
+    .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p))
+    .filter(([t]) => t >= start && t <= end);
+
+  // Orden por tiempo por si acaso
+  prices.sort((a, b) => a[0] - b[0]);
+  return prices;
+}
+
+function authOk(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  const auth = req.headers.get("authorization") || "";
+  return !!secret && auth === `Bearer ${secret}`;
 }
 
 async function sendTelegram(text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN!;
-  const chatId = process.env.TELEGRAM_CHAT_ID!;
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) return; // si no está configurado, no rompe
 
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -50,74 +77,8 @@ async function sendTelegram(text: string) {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Telegram error: ${body}`);
+    throw new Error(`Telegram error: ${body.slice(0, 200)}`);
   }
-}
-
-async function shouldAlert(candles: Candle[]) {
-  const closes = candles.map(c => c.c);
-  const last = closes[closes.length - 1];
-
-  // RSI 14
-  const r = rsi(closes, 14);
-
-  // EMA 50 y 200 (para filtro de tendencia)
-  const e50 = ema(closes.slice(-300), 50);
-  const e200 = ema(closes.slice(-600), 200);
-
-  // Caída en 1h y 24h (si tus velas son 1m)
-  const oneHourAgo = closes[Math.max(0, closes.length - 60)];
-  const dayAgo = closes[Math.max(0, closes.length - 1440)];
-
-  const change1h = pct(oneHourAgo, last);
-  const change24h = pct(dayAgo, last);
-
-  // Rebote desde mínimo reciente (últimos 120m)
-  const window = closes.slice(-120);
-  const minRecent = Math.min(...window);
-  const rebound = pct(minRecent, last);
-
-  // Score
-  let score = 0;
-
-  // RSI
-  if (r < 25) score += 45;
-  else if (r < 30) score += 35;
-  else if (r < 35) score += 20;
-
-  // Drawdown (descuento)
-  if (change24h <= -3) score += 25;
-  if (change1h <= -1.5) score += 20;
-
-  // Confirmación (rebote)
-  if (rebound >= 0.3) score += 15;
-  else score -= 10; // evita alertar en caída libre
-
-  // Tendencia (filtro)
-  if (last >= e50) score += 5;
-  if (last >= e200) score += 5;
-  else score -= 5;
-
-  const verdict = score >= 70;
-
-  return {
-    verdict,
-    score,
-    last,
-    rsi: r,
-    change1h,
-    change24h,
-    rebound,
-    e50,
-    e200,
-  };
-}
-
-function authOk(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization") || "";
-  const ok = !!secret && auth === `Bearer ${secret}`;
-  return ok;
 }
 
 export async function POST(req: Request) {
@@ -126,26 +87,94 @@ export async function POST(req: Request) {
   }
 
   try {
-    const candles = await fetchCandles();
-    const res = await shouldAlert(candles);
+    const series = await fetchPrices24h_5m();
+    const closes = series.map(([, p]) => p);
+    const last = closes[closes.length - 1];
 
-    // Cooldown simple en KV/DB sería ideal.
-    // Por ahora, evitamos spam: solo alerta si el score es alto (>=80).
-    if (res.verdict && res.score >= 80) {
+    // Necesitamos suficiente data para EMA200
+    if (closes.length < 210) {
+      return NextResponse.json({ ok: false, error: "not_enough_data" }, { status: 500 });
+    }
+
+    const rsi14 = rsi(closes, 14);
+
+    // EMA con las últimas 210+ velas de 5m
+    const ema50 = ema(closes.slice(-120), 50);   // ~10h (suficiente para estabilizar)
+    const ema200 = ema(closes.slice(-260), 200); // ~21.6h (ideal con tu ventana 24h)
+
+    // Cambios
+    const oneHourAgo = closes[Math.max(0, closes.length - 12)];     // 12 velas de 5m = 1h
+    const dayAgo = closes[0];                                       // inicio ventana 24h aprox
+
+    const change1h = pct(oneHourAgo, last);
+    const change24h = pct(dayAgo, last);
+
+    // Rebote en 2h: min de últimas 24 velas (2h) y cuánto se recuperó
+    const last2h = closes.slice(-24);
+    const min2h = Math.min(...last2h);
+    const rebound2h = pct(min2h, last);
+
+    // SCORE + razones
+    let score = 0;
+    const reason: string[] = [];
+
+    // RSI
+    if (rsi14 < 25) { score += 45; reason.push("RSI<25 (muy sobrevendido)"); }
+    else if (rsi14 < 30) { score += 35; reason.push("RSI<30 (sobrevendido)"); }
+    else if (rsi14 < 35) { score += 20; reason.push("RSI<35 (debilidad)"); }
+
+    // “Descuento” (caída)
+    if (change24h <= -3) { score += 25; reason.push("Caída 24h ≥ 3%"); }
+    if (change1h <= -1.5) { score += 20; reason.push("Caída 1h ≥ 1.5%"); }
+
+    // Confirmación (rebote)
+    if (rebound2h >= 0.3) { score += 15; reason.push("Rebote ≥ 0.3% desde mínimo 2h"); }
+    else { score -= 10; reason.push("Sin rebote (evitar caída libre)"); }
+
+    // Tendencia (filtro)
+    if (last >= ema50) { score += 5; reason.push("Precio ≥ EMA50"); }
+    if (last >= ema200) { score += 5; reason.push("Precio ≥ EMA200"); }
+    else { score -= 5; reason.push("Precio < EMA200 (tendencia débil)"); }
+
+    // Veredicto
+    const verdict = score >= 70;
+
+    const payload = {
+      at: Date.now(),
+      verdict,
+      score,
+      price: last,
+      rsi14,
+      ema50,
+      ema200,
+      change1h,
+      change24h,
+      rebound2h,
+      reason,
+    };
+
+    // Guardar para el frontend (popup)
+    setSignal(payload);
+
+    // Telegram solo si es fuerte (evita spam)
+    if (verdict && score >= 80) {
       const msg =
-        `📌 BTC: *Zona de entrada*\n` +
-        `Precio: ${res.last.toFixed(2)}\n` +
-        `Score: ${res.score}/100\n` +
-        `RSI(14): ${res.rsi.toFixed(1)}\n` +
-        `1h: ${res.change1h.toFixed(2)}% | 24h: ${res.change24h.toFixed(2)}%\n` +
-        `Rebote(120m): ${res.rebound.toFixed(2)}%\n`;
+        `📌 BTC: ZONA DE ENTRADA\n` +
+        `Precio: $${last.toFixed(2)}\n` +
+        `Score: ${score}/100\n` +
+        `RSI(14): ${rsi14.toFixed(1)}\n` +
+        `1h: ${change1h.toFixed(2)}% | 24h: ${change24h.toFixed(2)}%\n` +
+        `Rebote(2h): ${rebound2h.toFixed(2)}%\n` +
+        `Razones: ${reason.slice(0, 3).join(" • ")}`;
 
       await sendTelegram(msg);
     }
 
-    return NextResponse.json({ ok: true, ...res });
+    return NextResponse.json({ ok: true, ...payload });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "error" }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: "server_error", message: e?.message ?? String(e) },
+      { status: 500 }
+    );
   }
 }
-
