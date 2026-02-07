@@ -1,3 +1,3 @@
-export async function GET(req: Request) {
-  return new Response("CRON LIVE 999", { status: 200 });
+export async function GET() {
+  return new Response("CRON OK 999", { status: 200 });
 }
