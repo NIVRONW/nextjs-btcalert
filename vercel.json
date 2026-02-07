@@ -1,9 +1,9 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/cron/check-btc?secret=@cron_secret",
+      "path": "/api/cron/check-btc",
       "schedule": "*/5 * * * *"
     }
   ]
 }
-
