@@ -141,7 +141,7 @@ export async function POST(req: Request) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const force = searchParams.get("force") === "1"; // prueba inmediata
+    const force = searchParams.get("force") === "1";
 
     const series = await fetchPrices24h_5m();
     const closes = series.map(([, p]) => p);
@@ -228,11 +228,17 @@ export async function POST(req: Request) {
     // ✅ Guardar para popup
     setSignal(payload);
 
-    // ✅ Telegram cuando hay señal fuerte o force=1
-    if ((verdict && score >= 80) || force) {
+    // ✅ Telegram cuando es señal fuerte o force=1
+    const shouldSendReal = verdict && score >= 80;
+
+    if (shouldSendReal || force) {
+      const title = force
+        ? "🧪 PRUEBA DE ALERTA"
+        : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
+
       const msg =
-        `📌 BTC: ${force ? "PRUEBA (force)" : "ZONA DE ENTRADA"}\n` +
-        `Precio: $${payload.price.toFixed(2)}\n` +
+        `${title}\n` +
+        `BTC: $${payload.price.toFixed(2)}\n` +
         `Score: ${payload.score}/100\n` +
         `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
         `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
@@ -246,10 +252,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ En producción NO devolvemos 500 por Telegram
     return NextResponse.json({ ok: true, ...payload, ...telegramMeta });
   } catch (e: any) {
-    // Si hay error real del cálculo / fetch Kraken, sí es 500
     return NextResponse.json(
       { ok: false, error: "server_error", message: e?.message ?? String(e), ...telegramMeta },
       { status: 500 }
