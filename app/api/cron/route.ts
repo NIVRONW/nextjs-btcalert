@@ -29,27 +29,4 @@ function pct(from: number, to: number) {
   return ((to - from) / from) * 100;
 }
 
-async function fetchPrices24h_5m(): Promise<[number, number][]> {
-  const url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=5";
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: { accept: "application/json" },
-  });
-
-  const text = await res.text();
-  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
-
-  const json = JSON.parse(text);
-  const result = json?.result;
-  const keys = result ? Object.keys(result).filter((k: string) => k !== "last") : [];
-  const firstKey = keys[0];
-  const ohlc = firstKey ? result[firstKey] : null;
-
-  if (!Array.isArray(ohlc) || ohlc.length < 220) throw new Error("bad_series");
-
-  const end = Date.now();
-  const start = end - 24 * 60 * 60 * 1000;
-
-  const prices: [number, number][] = ohlc
-    .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
-    .filter(([t, p]) =
+asy
