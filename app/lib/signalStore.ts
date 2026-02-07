@@ -22,4 +22,3 @@ export function setSignal(v: SignalPayload) {
 export function getSignal() {
   return lastSignal;
 }
-
