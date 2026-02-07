@@ -1,17 +1,16 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  const got = new URL(req.url).searchParams.get("secret");
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get("authorization");
 
-  // Seguridad: que solo Vercel Cron lo pueda llamar
-  if (!secret || got !== secret) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  // Seguridad oficial para Vercel Cron
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
-  // Ejemplo simple: mensaje para confirmar que el cron corre
   const base = new URL(req.url).origin;
 
+  // Llamamos al endpoint que envía a Telegram
   const resp = await fetch(`${base}/api/telegram/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -23,6 +22,10 @@ export async function GET(req: Request) {
   });
 
   const data = await resp.json();
-  return NextResponse.json({ ok: true, sent: data });
-}
 
+  return Response.json({
+    ok: true,
+    cron: "running",
+    telegram: data,
+  });
+}
