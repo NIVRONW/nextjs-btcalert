@@ -85,7 +85,6 @@ function authOk(req: Request) {
   return secret.length > 0 && token === secret;
 }
 
-// Escapa HTML para que Telegram no rompa si hay símbolos raros
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, "&amp;")
@@ -128,10 +127,6 @@ export async function POST(req: Request) {
     const series = await fetchPrices24h_5m();
     const closes = series.map(([, p]) => p);
     const last = closes[closes.length - 1];
-
-    if (closes.length < 210) {
-      return NextResponse.json({ ok: false, error: "not_enough_data" }, { status: 500 });
-    }
 
     const rsi14 = rsi(closes, 14);
     const ema50 = ema(closes.slice(-120), 50);
@@ -208,12 +203,9 @@ export async function POST(req: Request) {
 
     setSignal(payload);
 
-    // ✅ ENVÍO REAL: verdict true y score >= 80
-    // ✅ ENVÍO PRUEBA: force=1
     const shouldSend = (verdict && score >= 80) || force;
 
     if (shouldSend) {
-      // ✅ En force también mostramos el headline real para que lo puedas probar
       const headline = force
         ? "🧪 PRUEBA (formato real)"
         : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
@@ -227,10 +219,11 @@ export async function POST(req: Request) {
 
       const html =
         `<b>${escapeHtml(headline)}</b>\n` +
-        `<b>Hora:</b> ${escapeHtml(when)}\n\n` +
-        `<b>Precio Actual:</b> $${payload.price.toFixed(2)}\n\n` +
+        `<i>FINGERPRINT: CRON_V3_HTML_OK</i>\n\n` +
+        `<b>Precio Actual:</b> $${payload.price.toFixed(2)}\n` +
         `<b>Motivos:</b>\n` +
-        topReasons.map((r) => `• ${r}`).join("\n");
+        topReasons.map((r) => `• ${r}`).join("\n") +
+        `\n\n<b>Hora:</b> ${escapeHtml(when)}`;
 
       await sendTelegramHTML(html);
     }
