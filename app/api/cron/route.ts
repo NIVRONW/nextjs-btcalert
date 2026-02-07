@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { setSignal } from "@/app/lib/signalStore";
+import { setSignal } from "../../lib/signalStore";
 
 export const runtime = "nodejs";
 
@@ -12,14 +12,15 @@ function ema(values: number[], period: number) {
 
 function rsi(values: number[], period = 14) {
   if (values.length < period + 1) return 50;
-  let gains = 0, losses = 0;
+  let gains = 0,
+    losses = 0;
   for (let i = values.length - period; i < values.length; i++) {
     const diff = values[i] - values[i - 1];
     if (diff >= 0) gains += diff;
     else losses += Math.abs(diff);
   }
   const avgGain = gains / period;
-  const avgLoss = (losses / period) || 1e-9;
+  const avgLoss = losses / period || 1e-9;
   const rs = avgGain / avgLoss;
   return 100 - 100 / (1 + rs);
 }
@@ -30,7 +31,11 @@ function pct(from: number, to: number) {
 
 async function fetchPrices24h_5m(): Promise<[number, number][]> {
   const url = "https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=5";
-  const res = await fetch(url, { cache: "no-store", headers: { accept: "application/json" } });
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: { accept: "application/json" },
+  });
+
   const text = await res.text();
   if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
 
@@ -40,9 +45,7 @@ async function fetchPrices24h_5m(): Promise<[number, number][]> {
   const firstKey = keys[0];
   const ohlc = firstKey ? result[firstKey] : null;
 
-  if (!Array.isArray(ohlc) || ohlc.length < 220) {
-    throw new Error("bad_series");
-  }
+  if (!Array.isArray(ohlc) || ohlc.length < 220) throw new Error("bad_series");
 
   const end = Date.now();
   const start = end - 24 * 60 * 60 * 1000;
@@ -52,7 +55,6 @@ async function fetchPrices24h_5m(): Promise<[number, number][]> {
     .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p))
     .filter(([t]) => t >= start && t <= end);
 
-  // Orden por tiempo por si acaso
   prices.sort((a, b) => a[0] - b[0]);
   return prices;
 }
@@ -66,7 +68,7 @@ function authOk(req: Request) {
 async function sendTelegram(text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return; // si no está configurado, no rompe
+  if (!token || !chatId) return;
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const res = await fetch(url, {
@@ -87,56 +89,74 @@ export async function POST(req: Request) {
   }
 
   try {
+    const { searchParams } = new URL(req.url);
+    const force = searchParams.get("force") === "1"; // ✅ prueba inmediata de Telegram
+
     const series = await fetchPrices24h_5m();
     const closes = series.map(([, p]) => p);
     const last = closes[closes.length - 1];
 
-    // Necesitamos suficiente data para EMA200
     if (closes.length < 210) {
       return NextResponse.json({ ok: false, error: "not_enough_data" }, { status: 500 });
     }
 
     const rsi14 = rsi(closes, 14);
+    const ema50 = ema(closes.slice(-120), 50);
+    const ema200 = ema(closes.slice(-260), 200);
 
-    // EMA con las últimas 210+ velas de 5m
-    const ema50 = ema(closes.slice(-120), 50);   // ~10h (suficiente para estabilizar)
-    const ema200 = ema(closes.slice(-260), 200); // ~21.6h (ideal con tu ventana 24h)
-
-    // Cambios
-    const oneHourAgo = closes[Math.max(0, closes.length - 12)];     // 12 velas de 5m = 1h
-    const dayAgo = closes[0];                                       // inicio ventana 24h aprox
+    const oneHourAgo = closes[Math.max(0, closes.length - 12)];
+    const dayAgo = closes[0];
 
     const change1h = pct(oneHourAgo, last);
     const change24h = pct(dayAgo, last);
 
-    // Rebote en 2h: min de últimas 24 velas (2h) y cuánto se recuperó
     const last2h = closes.slice(-24);
     const min2h = Math.min(...last2h);
     const rebound2h = pct(min2h, last);
 
-    // SCORE + razones
     let score = 0;
     const reason: string[] = [];
 
-    // RSI
-    if (rsi14 < 25) { score += 45; reason.push("RSI<25 (muy sobrevendido)"); }
-    else if (rsi14 < 30) { score += 35; reason.push("RSI<30 (sobrevendido)"); }
-    else if (rsi14 < 35) { score += 20; reason.push("RSI<35 (debilidad)"); }
+    if (rsi14 < 25) {
+      score += 45;
+      reason.push("RSI<25 (muy sobrevendido)");
+    } else if (rsi14 < 30) {
+      score += 35;
+      reason.push("RSI<30 (sobrevendido)");
+    } else if (rsi14 < 35) {
+      score += 20;
+      reason.push("RSI<35 (debilidad)");
+    }
 
-    // “Descuento” (caída)
-    if (change24h <= -3) { score += 25; reason.push("Caída 24h ≥ 3%"); }
-    if (change1h <= -1.5) { score += 20; reason.push("Caída 1h ≥ 1.5%"); }
+    if (change24h <= -3) {
+      score += 25;
+      reason.push("Caída 24h ≥ 3%");
+    }
+    if (change1h <= -1.5) {
+      score += 20;
+      reason.push("Caída 1h ≥ 1.5%");
+    }
 
-    // Confirmación (rebote)
-    if (rebound2h >= 0.3) { score += 15; reason.push("Rebote ≥ 0.3% desde mínimo 2h"); }
-    else { score -= 10; reason.push("Sin rebote (evitar caída libre)"); }
+    if (rebound2h >= 0.3) {
+      score += 15;
+      reason.push("Rebote ≥ 0.3% desde mínimo 2h");
+    } else {
+      score -= 10;
+      reason.push("Sin rebote (evitar caída libre)");
+    }
 
-    // Tendencia (filtro)
-    if (last >= ema50) { score += 5; reason.push("Precio ≥ EMA50"); }
-    if (last >= ema200) { score += 5; reason.push("Precio ≥ EMA200"); }
-    else { score -= 5; reason.push("Precio < EMA200 (tendencia débil)"); }
+    if (last >= ema50) {
+      score += 5;
+      reason.push("Precio ≥ EMA50");
+    }
+    if (last >= ema200) {
+      score += 5;
+      reason.push("Precio ≥ EMA200");
+    } else {
+      score -= 5;
+      reason.push("Precio < EMA200 (tendencia débil)");
+    }
 
-    // Veredicto
     const verdict = score >= 70;
 
     const payload = {
@@ -153,19 +173,19 @@ export async function POST(req: Request) {
       reason,
     };
 
-    // Guardar para el frontend (popup)
+    // ✅ Guardar para el popup
     setSignal(payload);
 
-    // Telegram solo si es fuerte (evita spam)
-    if (verdict && score >= 80) {
+    // ✅ Telegram: real o forzado
+    if ((verdict && score >= 80) || force) {
       const msg =
-        `📌 BTC: ZONA DE ENTRADA\n` +
-        `Precio: $${last.toFixed(2)}\n` +
-        `Score: ${score}/100\n` +
-        `RSI(14): ${rsi14.toFixed(1)}\n` +
-        `1h: ${change1h.toFixed(2)}% | 24h: ${change24h.toFixed(2)}%\n` +
-        `Rebote(2h): ${rebound2h.toFixed(2)}%\n` +
-        `Razones: ${reason.slice(0, 3).join(" • ")}`;
+        `📌 BTC: ${force ? "PRUEBA (force)" : "ZONA DE ENTRADA"}\n` +
+        `Precio: $${payload.price.toFixed(2)}\n` +
+        `Score: ${payload.score}/100\n` +
+        `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
+        `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
+        `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
+        `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
 
       await sendTelegram(msg);
     }
