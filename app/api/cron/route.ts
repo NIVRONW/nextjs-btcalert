@@ -117,8 +117,12 @@ async function sendTelegramHTML(html: string) {
 
 export async function POST(req: Request) {
   if (!authOk(req)) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+    return NextResponse.json({
+  ok: true,
+  DEPLOY_MARK: "CRON_ROUTE_V3_ABC",
+  now: Date.now(),
+  ...payload,
+});
 
   try {
     const { searchParams } = new URL(req.url);
