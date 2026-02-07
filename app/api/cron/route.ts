@@ -116,9 +116,7 @@ async function trySendTelegram(text: string): Promise<{ ok: true } | { ok: false
     });
 
     const body = await res.text();
-    if (!res.ok) {
-      return { ok: false, error: `Telegram error ${res.status}: ${body.slice(0, 200)}` };
-    }
+    if (!res.ok) return { ok: false, error: `Telegram error ${res.status}: ${body.slice(0, 200)}` };
 
     return { ok: true };
   } catch (e: any) {
@@ -135,9 +133,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const telegramMeta: { telegramOk: boolean; telegramError?: string } = {
-    telegramOk: true,
-  };
+  const telegramMeta: { telegramOk: boolean; telegramError?: string } = { telegramOk: true };
 
   try {
     const { searchParams } = new URL(req.url);
@@ -225,27 +221,26 @@ export async function POST(req: Request) {
       reason,
     };
 
-    // ✅ Guardar para popup
     setSignal(payload);
 
-    // ✅ Telegram cuando es señal fuerte o force=1
     const shouldSendReal = verdict && score >= 80;
 
     if (shouldSendReal || force) {
-      const title = force
-        const title = force
-  ? "🧪 PRUEBA — 🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR"
-  : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
+      // ✅ SIEMPRE primera línea
+      const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
+
+      // Etiqueta solo para diferenciar test vs real
+      const tag = force ? "🧪 PRUEBA (force)" : "✅ SEÑAL REAL";
 
       const msg =
-  `${title}\n` +
-  `AHORA ES UN BUEN MOMENTO PARA INVERTIR\n` +
-  `BTC: $${payload.price.toFixed(2)}\n` +
-  `Score: ${payload.score}/100\n` +
-  `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
-  `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
-  `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
-  `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
+        `${headline}\n` +
+        `${tag}\n\n` +
+        `Precio: $${payload.price.toFixed(2)}\n` +
+        `Score: ${payload.score}/100\n` +
+        `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
+        `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
+        `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
+        `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
 
       const tg = await trySendTelegram(msg);
       if (!tg.ok) {
