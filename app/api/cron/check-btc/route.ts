@@ -1,7 +1,6 @@
 export async function GET(req: Request) {
   const base = new URL(req.url).origin;
 
-  // Dispara un mensaje a Telegram usando tu endpoint /api/telegram/send
   const r = await fetch(`${base}/api/telegram/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
