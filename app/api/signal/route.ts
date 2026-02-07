@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
+import { getSignal } from "@/app/lib/signalStore";
 
-let lastSignal: any = null;
+export const runtime = "nodejs";
 
-export function GET() {
-  return NextResponse.json({ ok: true, lastSignal });
+export async function GET() {
+  return NextResponse.json({ ok: true, lastSignal: getSignal() });
 }
-
-// Solo lo usa cron internamente
-export function _setSignal(v: any) {
-  lastSignal = v;
-}
-
