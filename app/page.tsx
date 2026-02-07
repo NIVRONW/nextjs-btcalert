@@ -86,10 +86,14 @@ export default function Home() {
       if (!AudioContextImpl) return;
 
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContextImpl();
+
       const ctx = audioCtxRef.current;
+      if (!ctx) return; // ✅ FIX: evita "ctx is possibly null"
 
       // Si está suspendido, intentar reanudar (puede requerir gesto)
-      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      if (ctx.state === "suspended") {
+        ctx.resume().catch(() => {});
+      }
 
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -170,7 +174,7 @@ export default function Home() {
       if (sig.at <= lastSeenSignalAtRef.current) return;
       lastSeenSignalAtRef.current = sig.at;
 
-      // Si no es veredicto positivo, no alertamos (pero podrías mostrar un “estado” si quieres)
+      // Si no es veredicto positivo, no alertamos
       if (!sig.verdict) return;
 
       // Cooldown: no alertar más de 1 vez cada 60 min
@@ -178,7 +182,7 @@ export default function Home() {
       const cooldownMs = 60 * 60 * 1000;
       if (now - lastAlertAtRef.current < cooldownMs) return;
 
-      // Para más control: sube/baja el umbral de score aquí
+      // Umbral de score
       const minScore = 80;
       if (sig.score < minScore) return;
 
@@ -201,7 +205,7 @@ export default function Home() {
         }
       }
     } catch {
-      // silencioso: no romper UI por el polling
+      // silencioso
     }
   }
 
@@ -212,7 +216,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // polling señales cada 30s
     pollSignal();
     const id = setInterval(pollSignal, 30_000);
     return () => clearInterval(id);
@@ -264,7 +267,12 @@ export default function Home() {
         >
           <div style={{ fontSize: 12, opacity: 0.8 }}>
             Alertas:{" "}
-            <span style={{ fontWeight: 700, color: alertsEnabled ? "#22c55e" : "#fbbf24" }}>
+            <span
+              style={{
+                fontWeight: 700,
+                color: alertsEnabled ? "#22c55e" : "#fbbf24",
+              }}
+            >
               {alertsEnabled ? "ACTIVAS" : "INACTIVAS"}
             </span>
             <span style={{ opacity: 0.7 }}> • Poll señal: 30s</span>
@@ -340,7 +348,9 @@ export default function Home() {
                   alignItems: "baseline",
                 }}
               >
-                <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
+                <div style={{ fontSize: 42, fontWeight: 800 }}>
+                  {formatUSD(price)}
+                </div>
 
                 <div style={{ fontSize: 16 }}>
                   Cambio 24h:{" "}
@@ -363,7 +373,11 @@ export default function Home() {
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
                   Últimas 24h
                 </div>
-                <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
+                <svg
+                  width="100%"
+                  viewBox="0 0 520 160"
+                  style={{ display: "block" }}
+                >
                   <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
                 </svg>
               </div>
@@ -383,7 +397,9 @@ export default function Home() {
                 Actualizar ahora
               </button>
 
-              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>Build Test 🚀</p>
+              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>
+                Build Test 🚀
+              </p>
             </>
           )}
         </div>
@@ -415,7 +431,9 @@ export default function Home() {
               boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div
+              style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
+            >
               <div>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>
                   📌 BTC: Zona de entrada detectada
@@ -446,7 +464,8 @@ export default function Home() {
               </div>
               <div style={{ fontSize: 14, opacity: 0.9 }}>
                 <div>
-                  Score: <b>{alert.score}/100</b> • RSI(14): <b>{alert.rsi14.toFixed(1)}</b>
+                  Score: <b>{alert.score}/100</b> • RSI(14):{" "}
+                  <b>{alert.rsi14.toFixed(1)}</b>
                 </div>
                 <div style={{ marginTop: 4, opacity: 0.9 }}>
                   1h: <b>{alert.change1h.toFixed(2)}%</b> • 24h:{" "}
