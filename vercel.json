@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/check-btc",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     }
   ]
 }
