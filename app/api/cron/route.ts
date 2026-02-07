@@ -4,15 +4,13 @@ import { setSignal } from "../../lib/signalStore";
 export const runtime = "nodejs";
 
 /* =========================
-   UTILIDADES INDICADORES
+   INDICADORES
 ========================= */
 
 function ema(values: number[], period: number) {
   const k = 2 / (period + 1);
   let e = values[0];
-  for (let i = 1; i < values.length; i++) {
-    e = values[i] * k + e * (1 - k);
-  }
+  for (let i = 1; i < values.length; i++) e = values[i] * k + e * (1 - k);
   return e;
 }
 
@@ -31,16 +29,16 @@ function rsi(values: number[], period = 14) {
   const avgGain = gains / period;
   const avgLoss = losses / period || 1e-9;
   const rs = avgGain / avgLoss;
-
   return 100 - 100 / (1 + rs);
 }
 
 function pct(from: number, to: number) {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from === 0) return 0;
   return ((to - from) / from) * 100;
 }
 
 /* =========================
-   FETCH PRECIOS
+   FETCH PRECIOS (24h a 5m)
 ========================= */
 
 async function fetchPrices24h_5m(): Promise<[number, number][]> {
@@ -52,35 +50,30 @@ async function fetchPrices24h_5m(): Promise<[number, number][]> {
   });
 
   const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Upstream ${res.status}: ${text.slice(0, 150)}`);
-  }
+  if (!res.ok) throw new Error(`Upstream ${res.status}: ${text.slice(0, 160)}`);
 
   const json = JSON.parse(text);
   const result = json?.result;
-  const keys = result ? Object.keys(result).filter((k) => k !== "last") : [];
+  const keys = result ? Object.keys(result).filter((k: string) => k !== "last") : [];
   const firstKey = keys[0];
   const ohlc = firstKey ? result[firstKey] : null;
 
-  if (!Array.isArray(ohlc) || ohlc.length < 220) {
-    throw new Error("bad_series");
-  }
+  if (!Array.isArray(ohlc) || ohlc.length < 220) throw new Error("bad_series");
 
   const end = Date.now();
   const start = end - 24 * 60 * 60 * 1000;
 
   const prices: [number, number][] = ohlc
-    .map((row: any[]) => [Number(row[0]) * 1000, Number(row[4])] as [number, number])
+    .map((row: any[]) => [Number(row?.[0]) * 1000, Number(row?.[4])] as [number, number])
     .filter(([t, p]) => Number.isFinite(t) && Number.isFinite(p))
     .filter(([t]) => t >= start && t <= end);
 
   prices.sort((a, b) => a[0] - b[0]);
-
   return prices;
 }
 
 /* =========================
-   AUTH
+   AUTH CRON
 ========================= */
 
 function authOk(req: Request) {
@@ -95,60 +88,67 @@ function authOk(req: Request) {
 }
 
 /* =========================
-   TELEGRAM
+   TELEGRAM (no rompe producción)
 ========================= */
 
-async function sendTelegram(text: string) {
-  const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
-  const chatId = (process.env.TELEGRAM_CHAT_ID ?? "").trim();
+async function trySendTelegram(text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const token = (process.env.TELEGRAM_BOT_TOKEN ?? "").trim();
+    const chatId = (process.env.TELEGRAM_CHAT_ID ?? "").trim();
 
-  if (!token || !chatId) {
-    throw new Error(
-      `Telegram env missing: tokenLen=${token.length} chatIdLen=${chatId.length}`
-    );
-  }
+    if (!token || !chatId) {
+      return {
+        ok: false,
+        error: `Telegram env missing: tokenLen=${token.length} chatIdLen=${chatId.length}`,
+      };
+    }
 
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+    const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    }),
-  });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
 
-  const body = await res.text();
+    const body = await res.text();
+    if (!res.ok) {
+      return { ok: false, error: `Telegram error ${res.status}: ${body.slice(0, 200)}` };
+    }
 
-  if (!res.ok) {
-    throw new Error(`Telegram error ${res.status}: ${body.slice(0, 200)}`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? String(e) };
   }
 }
 
 /* =========================
-   MAIN CRON
+   POST /api/cron
 ========================= */
 
 export async function POST(req: Request) {
   if (!authOk(req)) {
-    return NextResponse.json(
-      { ok: false, error: "Unauthorized" },
-      { status: 401 }
-    );
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+
+  const telegramMeta: { telegramOk: boolean; telegramError?: string } = {
+    telegramOk: true,
+  };
 
   try {
     const { searchParams } = new URL(req.url);
-    const force = searchParams.get("force") === "1";
+    const force = searchParams.get("force") === "1"; // prueba inmediata
 
     const series = await fetchPrices24h_5m();
     const closes = series.map(([, p]) => p);
     const last = closes[closes.length - 1];
 
     if (closes.length < 210) {
-      throw new Error("not_enough_data");
+      return NextResponse.json({ ok: false, error: "not_enough_data" }, { status: 500 });
     }
 
     const rsi14 = rsi(closes, 14);
@@ -170,29 +170,44 @@ export async function POST(req: Request) {
 
     if (rsi14 < 25) {
       score += 45;
-      reason.push("RSI<25");
+      reason.push("RSI<25 (muy sobrevendido)");
     } else if (rsi14 < 30) {
       score += 35;
-      reason.push("RSI<30");
+      reason.push("RSI<30 (sobrevendido)");
+    } else if (rsi14 < 35) {
+      score += 20;
+      reason.push("RSI<35 (debilidad)");
     }
 
     if (change24h <= -3) {
       score += 25;
-      reason.push("Caída 24h ≥ 3%");
+      reason.push("Caida 24h >= 3%");
     }
 
     if (change1h <= -1.5) {
       score += 20;
-      reason.push("Caída 1h ≥ 1.5%");
+      reason.push("Caida 1h >= 1.5%");
     }
 
     if (rebound2h >= 0.3) {
       score += 15;
-      reason.push("Rebote ≥ 0.3%");
+      reason.push("Rebote >= 0.3% desde minimo 2h");
+    } else {
+      score -= 10;
+      reason.push("Sin rebote (evitar caida libre)");
     }
 
-    if (last >= ema50) score += 5;
-    if (last >= ema200) score += 5;
+    if (last >= ema50) {
+      score += 5;
+      reason.push("Precio >= EMA50");
+    }
+    if (last >= ema200) {
+      score += 5;
+      reason.push("Precio >= EMA200");
+    } else {
+      score -= 5;
+      reason.push("Precio < EMA200");
+    }
 
     const verdict = score >= 70;
 
@@ -210,27 +225,34 @@ export async function POST(req: Request) {
       reason,
     };
 
+    // ✅ Guardar para popup
     setSignal(payload);
 
+    // ✅ Telegram cuando hay señal fuerte o force=1
     if ((verdict && score >= 80) || force) {
       const msg =
         `📌 BTC: ${force ? "PRUEBA (force)" : "ZONA DE ENTRADA"}\n` +
         `Precio: $${payload.price.toFixed(2)}\n` +
         `Score: ${payload.score}/100\n` +
-        `RSI: ${payload.rsi14.toFixed(1)}\n` +
-        `1h: ${payload.change1h.toFixed(2)}%\n` +
-        `24h: ${payload.change24h.toFixed(2)}%\n` +
-        `Rebote 2h: ${payload.rebound2h.toFixed(2)}%`;
+        `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
+        `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
+        `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
+        `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
 
-      await sendTelegram(msg);
+      const tg = await trySendTelegram(msg);
+      if (!tg.ok) {
+        telegramMeta.telegramOk = false;
+        telegramMeta.telegramError = tg.error;
+      }
     }
 
-    return NextResponse.json({ ok: true, ...payload });
+    // ✅ En producción NO devolvemos 500 por Telegram
+    return NextResponse.json({ ok: true, ...payload, ...telegramMeta });
   } catch (e: any) {
+    // Si hay error real del cálculo / fetch Kraken, sí es 500
     return NextResponse.json(
-      {
-        ok: false,
-        error: "server_error",
-        message: e?.message ?? String(e),
-      },
-      { status:
+      { ok: false, error: "server_error", message: e?.message ?? String(e), ...telegramMeta },
+      { status: 500 }
+    );
+  }
+}
