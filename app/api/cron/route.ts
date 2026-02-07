@@ -233,17 +233,19 @@ export async function POST(req: Request) {
 
     if (shouldSendReal || force) {
       const title = force
-        ? "🧪 PRUEBA DE ALERTA"
-        : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
+        const title = force
+  ? "🧪 PRUEBA — 🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR"
+  : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
 
       const msg =
-        `${title}\n` +
-        `BTC: $${payload.price.toFixed(2)}\n` +
-        `Score: ${payload.score}/100\n` +
-        `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
-        `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
-        `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
-        `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
+  `${title}\n` +
+  `AHORA ES UN BUEN MOMENTO PARA INVERTIR\n` +
+  `BTC: $${payload.price.toFixed(2)}\n` +
+  `Score: ${payload.score}/100\n` +
+  `RSI(14): ${payload.rsi14.toFixed(1)}\n` +
+  `1h: ${payload.change1h.toFixed(2)}% | 24h: ${payload.change24h.toFixed(2)}%\n` +
+  `Rebote(2h): ${payload.rebound2h.toFixed(2)}%\n` +
+  `Razones: ${(payload.reason || []).slice(0, 3).join(" • ")}`;
 
       const tg = await trySendTelegram(msg);
       if (!tg.ok) {
