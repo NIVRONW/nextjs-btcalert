@@ -115,14 +115,31 @@ async function sendTelegramHTML(html: string) {
   }
 }
 
+function buildTelegramHTML(args: {
+  headline: string;
+  price: number;
+  reasons: string[];
+  at: number;
+}) {
+  const when = new Date(args.at).toLocaleString("es-US", {
+    timeZone: "America/New_York",
+    hour12: true,
+  });
+
+  const reasons = (args.reasons || []).slice(0, 5).map((r) => `• ${escapeHtml(r)}`).join("\n");
+
+  return (
+    `<b>${escapeHtml(args.headline)}</b>\n\n` +
+    `<b>Precio actual:</b> $${args.price.toFixed(2)}\n\n` +
+    `<b>Motivos:</b>\n${reasons || "—"}\n\n` +
+    `<b>Hora:</b> ${escapeHtml(when)}`
+  );
+}
+
 export async function POST(req: Request) {
   if (!authOk(req)) {
-    return NextResponse.json({
-  ok: true,
-  DEPLOY_MARK: "CRON_ROUTE_V3_ABC",
-  now: Date.now(),
-  ...payload,
-});
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { searchParams } = new URL(req.url);
@@ -205,34 +222,30 @@ export async function POST(req: Request) {
       reason,
     };
 
+    // Guarda para popup en la web
     setSignal(payload);
 
-    const shouldSend = (verdict && score >= 80) || force;
+    // Telegram:
+    // - PRUEBA si force=1
+    // - ALERTA REAL solo cuando verdict=true y score>=80
+    const shouldSend = force || (verdict && score >= 80);
 
     if (shouldSend) {
       const headline = force
-        ? "🧪 PRUEBA (formato real)"
+        ? "🧪 PRUEBA DE ALERTA"
         : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
 
-      const when = new Date(payload.at).toLocaleString("es-US", {
-        timeZone: "America/New_York",
-        hour12: true,
+      const html = buildTelegramHTML({
+        headline,
+        price: payload.price,
+        reasons: payload.reason,
+        at: payload.at,
       });
-
-      const topReasons = (payload.reason || []).slice(0, 4).map(escapeHtml);
-
-      const html =
-        `<b>${escapeHtml(headline)}</b>\n` +
-        `<i>FINGERPRINT: CRON_V3_HTML_OK</i>\n\n` +
-        `<b>Precio Actual:</b> $${payload.price.toFixed(2)}\n` +
-        `<b>Motivos:</b>\n` +
-        topReasons.map((r) => `• ${r}`).join("\n") +
-        `\n\n<b>Hora:</b> ${escapeHtml(when)}`;
 
       await sendTelegramHTML(html);
     }
 
-    return NextResponse.json({ ok: true, ...payload });
+    return NextResponse.json({ ok: true, ...payload }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: "server_error", message: e?.message ?? String(e) },
