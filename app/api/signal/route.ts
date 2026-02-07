@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSignal } from "@/app/lib/signalStore";
+import { getSignal } from "../../lib/signalStore";
 
 export const runtime = "nodejs";
 
