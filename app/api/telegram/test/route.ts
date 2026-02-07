@@ -6,31 +6,24 @@ export async function GET() {
 
   if (!token || !chatId) {
     return NextResponse.json(
-      { ok: false, error: "Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en .env.local" },
+      { ok: false, error: "Faltan variables de entorno" },
       { status: 500 }
     );
   }
 
-  const text = `✅ Test Telegram OK | ${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })}`;
-
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    }),
-  });
+  const resp = await fetch(
+    `https://api.telegram.org/bot${token}/sendMessage`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: "🚀 Prueba desde Vercel funcionando",
+      }),
+    }
+  );
 
   const data = await resp.json();
 
-  return NextResponse.json({
-    ok: resp.ok,
-    telegram_ok: data?.ok ?? null,
-    telegram: data,
-  });
+  return NextResponse.json({ ok: true, telegram: data });
 }
-
