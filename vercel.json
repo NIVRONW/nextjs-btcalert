@@ -1,1 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/check-btc?secret=@cron_secret",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
 
