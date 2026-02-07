@@ -60,9 +60,15 @@ async function fetchPrices24h_5m(): Promise<[number, number][]> {
 }
 
 function authOk(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization") || "";
-  return !!secret && auth === `Bearer ${secret}`;
+  const secret = (process.env.CRON_SECRET ?? "").trim();
+  const authRaw = (req.headers.get("authorization") ?? "").trim();
+
+  // Acepta "Bearer xxx" con mayúsculas/minúsculas y espacios extra
+  const token = authRaw.toLowerCase().startsWith("bearer ")
+    ? authRaw.slice(7).trim()
+    : "";
+
+  return secret.length > 0 && token === secret;
 }
 
 async function sendTelegram(text: string) {
