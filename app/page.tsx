@@ -5,9 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 type Status = "loading" | "ok" | "error";
 type MarketPoint = { t: number; p: number };
 
+type Action = "BUY" | "SELL" | "NONE";
+
 type SignalPayload = {
   at: number;
   verdict: boolean;
+  action: Action; // ✅ NUEVO (viene de /api/signal)
   score: number;
   price: number;
   rsi14: number;
@@ -18,8 +21,6 @@ type SignalPayload = {
   rebound2h: number;
   reason: string[];
 };
-
-type Action = "BUY" | "SELL" | "NONE";
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -46,9 +47,7 @@ function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
   return points
     .map(
       (d, i) =>
-        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(
-          2
-        )}`
+        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`
     )
     .join(" ");
 }
@@ -64,11 +63,11 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function detectActionFromReason(reason: string[] | undefined | null): Action {
-  const txt = (reason || []).join(" ").toLowerCase();
-  if (txt.includes("venta") || txt.includes("sell") || txt.includes("🔴")) return "SELL";
-  if (txt.includes("compra") || txt.includes("buy") || txt.includes("🟢")) return "BUY";
-  return "NONE";
+function headlineFromAction(action: Action) {
+  if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
+  if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
+  // si llega NONE (no debería abrir popup), por si acaso:
+  return "ℹ️ Señal detectada";
 }
 
 export default function Home() {
@@ -200,13 +199,7 @@ export default function Home() {
 
       if ("Notification" in window) {
         if (Notification.permission === "granted") {
-          const action = detectActionFromReason(sig.reason);
-          const title =
-            action === "SELL"
-              ? "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴"
-              : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
-
-          new Notification(title, {
+          new Notification(headlineFromAction(sig.action), {
             body: `Precio ${sig.price ? formatUSD(sig.price) : ""}`,
           });
         }
@@ -228,10 +221,8 @@ export default function Home() {
         return;
       }
 
-      const action = detectActionFromReason(sig.reason);
-
       setLastSignalInfo(
-        `OK: verdict=${sig.verdict} score=${sig.score} action=${action} at=${sig.at} (URL=${url})`
+        `OK: verdict=${sig.verdict} action=${sig.action} score=${sig.score} at=${sig.at} (URL=${url})`
       );
 
       // Evita re-procesar la misma señal
@@ -240,6 +231,9 @@ export default function Home() {
 
       // Si no es veredicto positivo, no alertamos
       if (!sig.verdict) return;
+
+      // Si action es NONE, no alertamos (seguro)
+      if (!sig.action || sig.action === "NONE") return;
 
       const now = Date.now();
 
@@ -287,24 +281,19 @@ export default function Home() {
   }
 
   const scoreBar = alert ? clamp(alert.score, 0, 100) : 0;
-  const alertAction = alert ? detectActionFromReason(alert.reason) : "NONE";
 
-  const headerText =
-    alertAction === "SELL"
-      ? "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴"
-      : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
-
+  const headerText = alert ? headlineFromAction(alert.action) : "";
   const headerBg =
-    alertAction === "SELL"
-      ? "rgba(239, 68, 68, 0.15)" // rojo suave
-      : "rgba(34, 197, 94, 0.15)"; // verde suave
+    alert?.action === "SELL"
+      ? "rgba(239, 68, 68, 0.15)"
+      : "rgba(34, 197, 94, 0.15)";
 
   const headerBorder =
-    alertAction === "SELL"
+    alert?.action === "SELL"
       ? "1px solid rgba(239, 68, 68, 0.35)"
       : "1px solid rgba(34, 197, 94, 0.35)";
 
-  const headerBadgeColor = alertAction === "SELL" ? "#fca5a5" : "#86efac";
+  const headerBadgeColor = alert?.action === "SELL" ? "#fca5a5" : "#86efac";
 
   return (
     <main
@@ -331,12 +320,9 @@ export default function Home() {
             opacity: 0.95,
           }}
         >
-          <div
-            style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}
-          >
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              URL señal usada por la app:{" "}
-              <b style={{ color: "#60a5fa" }}>{signalURL}</b>
+              URL señal usada por la app: <b style={{ color: "#60a5fa" }}>{signalURL}</b>
             </div>
             <div>
               Modo prueba:{" "}
@@ -367,7 +353,7 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => pollSignal("/api/signal?force=1")}
+              onClick={() => pollSignal("/api/signal?force=1&action=BUY")}
               style={{
                 padding: "10px 12px",
                 borderRadius: 12,
@@ -378,25 +364,11 @@ export default function Home() {
                 fontWeight: 800,
               }}
             >
-              🧪 Forzar señal desde API
+              🧪 Forzar BUY desde API
             </button>
 
             <button
-              onClick={() =>
-                openAlert({
-                  at: Date.now(),
-                  verdict: true,
-                  score: 99,
-                  price: price ?? 0,
-                  rsi14: 50,
-                  ema50: 0,
-                  ema200: 0,
-                  change1h: 0,
-                  change24h: 0,
-                  rebound2h: 0,
-                  reason: ["🟢 COMPRA", "TEST: popup directo (sin API)"],
-                })
-              }
+              onClick={() => pollSignal("/api/signal?force=1&action=SELL")}
               style={{
                 padding: "10px 12px",
                 borderRadius: 12,
@@ -407,36 +379,7 @@ export default function Home() {
                 fontWeight: 800,
               }}
             >
-              🚨 Probar alerta ahora (COMPRA)
-            </button>
-
-            <button
-              onClick={() =>
-                openAlert({
-                  at: Date.now(),
-                  verdict: true,
-                  score: 99,
-                  price: price ?? 0,
-                  rsi14: 50,
-                  ema50: 0,
-                  ema200: 0,
-                  change1h: 0,
-                  change24h: 0,
-                  rebound2h: 0,
-                  reason: ["🔴 VENTA", "TEST: popup directo (sin API)"],
-                })
-              }
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #334155",
-                background: "#111827",
-                color: "#e5e7eb",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              🚨 Probar alerta ahora (VENTA)
+              🧪 Forzar SELL desde API
             </button>
           </div>
         </div>
@@ -534,9 +477,7 @@ export default function Home() {
                   alignItems: "baseline",
                 }}
               >
-                <div style={{ fontSize: 42, fontWeight: 800 }}>
-                  {formatUSD(price)}
-                </div>
+                <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
 
                 <div style={{ fontSize: 16 }}>
                   Cambio 24h:{" "}
@@ -556,9 +497,7 @@ export default function Home() {
               </div>
 
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-                  Últimas 24h
-                </div>
+                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Últimas 24h</div>
                 <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
                   <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
                 </svg>
@@ -579,9 +518,7 @@ export default function Home() {
                 Actualizar ahora
               </button>
 
-              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>
-                Build Test 🚀
-              </p>
+              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>Build Test 🚀</p>
             </>
           )}
         </div>
@@ -631,34 +568,11 @@ export default function Home() {
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ opacity: 0.85, fontSize: 12 }}>
-                Señal detectada por el sistema
-              </div>
-
-              <button
-                onClick={() => setAlertToastOpen(false)}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-
             <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ fontSize: 28, fontWeight: 900 }}>
-                {formatUSD(alert.price)}
-              </div>
+              <div style={{ fontSize: 28, fontWeight: 900 }}>{formatUSD(alert.price)}</div>
               <div style={{ fontSize: 14, opacity: 0.9 }}>
                 <div>
-                  Score: <b>{alert.score}/100</b> • RSI(14):{" "}
-                  <b>{alert.rsi14.toFixed(1)}</b>
+                  Score: <b>{alert.score}/100</b> • RSI(14): <b>{alert.rsi14.toFixed(1)}</b>
                 </div>
                 <div style={{ marginTop: 4, opacity: 0.9 }}>
                   1h: <b>{alert.change1h.toFixed(2)}%</b> • 24h:{" "}
@@ -730,7 +644,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* RAW debug (por si quieres ver la respuesta) */}
+      {/* RAW debug */}
       {lastSignalRaw && (
         <div
           style={{
