@@ -328,14 +328,14 @@ export default function Home() {
 
               <div>
                 <div style={{ opacity: 0.7 }}>EMA 50</div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                <div style={{ fontWeight: 800, fontSize: 24 }}>
                   {formatUSD(signal.ema50)}
                 </div>
               </div>
 
               <div>
                 <div style={{ opacity: 0.7 }}>EMA 200</div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                <div style={{ fontWeight: 800, fontSize: 24 }}>
                   {formatUSD(signal.ema200)}
                 </div>
               </div>
