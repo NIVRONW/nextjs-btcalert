@@ -205,7 +205,7 @@ export async function POST(req: Request) {
       `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
       (force ? `\n\n<b>Modo:</b> PRUEBA (force=1)` : "");
 
-    await sendTelegramHTML(msg);
+    const telegram = await sendTelegramHTML(msg);
   }
 
   return json({
