@@ -217,11 +217,9 @@ const msg =
   `<b>Precio actual:</b> $${price.toFixed(2)}\n\n` +
   `<b>Motivo:</b>\n` +
   `${reasons.slice(0, 3).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
-  `<b>Fecha y hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
-  (force ? `\n\n<b>Modo:</b> PRUEBA` : "");
+  `<b>Fecha y hora:</b> ${escapeHTML(new Date().toLocaleString())}`;
 
 telegram = await sendTelegramHTML(msg);
-
     }
 
     return json({
