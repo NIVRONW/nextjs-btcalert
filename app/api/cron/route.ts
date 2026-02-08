@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     const provided = getBearer(req);
 
     if (!expected || provided !== expected) {
-      return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: false, error: "Unauthorized", build: "CRON-ACTION-V2" }, 401);
     }
 
     const urlObj = new URL(req.url);
@@ -132,28 +132,27 @@ export async function POST(req: Request) {
     // ✅ force=1 (prueba)
     const force = urlObj.searchParams.get("force") === "1";
 
-    // ✅ action=BUY|SELL solo cuando force=1 (para pruebas)
+    // ✅ action=BUY|SELL solo cuando force=1
     const forcedActionRaw = (urlObj.searchParams.get("action") || "").toUpperCase();
     const forcedAction: "BUY" | "SELL" | "" =
       forcedActionRaw === "BUY" ? "BUY" : forcedActionRaw === "SELL" ? "SELL" : "";
 
     // ✅ Data real
-    const got = await fetchHourlyBTC(240); // ~10 dias
+    const got = await fetchHourlyBTC(240);
     if (!got.ok) {
       return json(
-        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data },
+        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data, build: "CRON-ACTION-V2" },
         500
       );
     }
 
     const closes = got.closes;
     if (closes.length < 210) {
-      return json({ ok: false, error: "Not enough price data", points: closes.length }, 500);
+      return json({ ok: false, error: "Not enough price data", points: closes.length, build: "CRON-ACTION-V2" }, 500);
     }
 
     const price = closes[closes.length - 1];
 
-    // Indicadores internos (NO se muestran en Telegram)
     const ema50 = ema(closes.slice(-60), 50);
     const ema200 = ema(closes.slice(-220), 200);
     const rsi14 = rsi(closes.slice(-60), 14);
@@ -162,7 +161,6 @@ export async function POST(req: Request) {
     const low2h = Math.min(...last3);
     const rebound2h = pct(price, low2h);
 
-    // ✅ Score + motivos (interno)
     let score = 0;
     const reasons: string[] = [];
 
@@ -211,28 +209,23 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
-    // ✅ Umbral
     const VERY_GOOD_SCORE = 75;
 
-    // ✅ Señal COMPRA (tu lógica)
     const buyVerdict =
       score >= VERY_GOOD_SCORE &&
       price >= ema200 &&
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-    // ✅ Señal VENTA (simple)
     const sellVerdict =
       score >= VERY_GOOD_SCORE &&
       price < ema200 &&
       ema50 < ema200 &&
       (rsi14 === null || rsi14 >= 55);
 
-    // ✅ Acción final (si force=1 y action=BUY|SELL, se respeta)
     const action: "BUY" | "SELL" | "NONE" =
       force && forcedAction ? forcedAction : buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
 
-    // ✅ Enviar si force=1 o si hay acción real
     const shouldSend = force || action !== "NONE";
 
     let telegram: any = { ok: false, skipped: true };
@@ -265,9 +258,11 @@ export async function POST(req: Request) {
 
     return json({
       ok: true,
+      build: "CRON-ACTION-V2",
       at: Date.now(),
       price,
       action,
+      forcedAction,
       alert: shouldSend,
       force,
       reason: reasons.slice(0, 3),
@@ -278,11 +273,10 @@ export async function POST(req: Request) {
       source: "CryptoCompare",
     });
   } catch (err: any) {
-    return json({ ok: false, error: err?.message ?? String(err) }, 500);
+    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-ACTION-V2" }, 500);
   }
 }
 
-// Permite GET si lo necesitas (opcional)
 export async function GET(req: Request) {
   return POST(req);
 }
