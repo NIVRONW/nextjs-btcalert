@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Status = "loading" | "ok" | "error";
-type MarketPoint = { t: number; p: number };
 type Action = "BUY" | "SELL" | "NONE";
 
 type SignalPayload = {
@@ -29,17 +28,37 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function headlineFromAction(action: Action) {
-  if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
-  if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
-  return "";
-}
-
 async function fetchJSON(url: string) {
   const res = await fetch(url, { cache: "no-store" });
   const text = await res.text().catch(() => "");
   if (!res.ok) throw new Error(text);
   return JSON.parse(text);
+}
+
+function getBanner(signal: SignalPayload) {
+  // Regla: si no hay veredicto, lo tratamos como "sin señal clara"
+  if (!signal.verdict || signal.action === "NONE") {
+    return {
+      text: "🟡 Sin señal clara",
+      color: "#fbbf24",
+      sub: "El mercado no muestra una oportunidad sólida ahora mismo.",
+    };
+  }
+
+  if (signal.action === "SELL") {
+    return {
+      text: "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴",
+      color: "#f87171",
+      sub: "Se detectaron condiciones de salida.",
+    };
+  }
+
+  // BUY
+  return {
+    text: "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢",
+    color: "#4ade80",
+    sub: "Se detectaron condiciones de entrada.",
+  };
 }
 
 export default function Home() {
@@ -64,6 +83,7 @@ export default function Home() {
   }, []);
 
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
+  const banner = signal ? getBanner(signal) : null;
 
   return (
     <main
@@ -83,7 +103,7 @@ export default function Home() {
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p>Error cargando señal.</p>}
 
-        {signal && (
+        {signal && banner && (
           <div
             style={{
               borderRadius: 18,
@@ -92,21 +112,23 @@ export default function Home() {
               border: "1px solid #1f2937",
             }}
           >
-            {/* TITULO */}
+            {/* BANNER */}
             <div
               style={{
                 fontWeight: 900,
                 fontSize: 18,
-                marginBottom: 20,
-                color:
-                  signal.action === "SELL" ? "#f87171" : "#4ade80",
+                marginBottom: 6,
+                color: banner.color,
               }}
             >
-              {headlineFromAction(signal.action)}
+              {banner.text}
+            </div>
+            <div style={{ opacity: 0.75, fontSize: 12, marginBottom: 18 }}>
+              {banner.sub}
             </div>
 
             {/* PRECIO GRANDE */}
-            <div style={{ fontSize: 40, fontWeight: 900 }}>
+            <div style={{ fontSize: 44, fontWeight: 900 }}>
               {formatUSD(signal.price)}
             </div>
 
@@ -115,6 +137,7 @@ export default function Home() {
               <div style={{ marginBottom: 6 }}>
                 Score: <b>{signal.score}/100</b>
               </div>
+
               <div
                 style={{
                   height: 12,
@@ -165,6 +188,13 @@ export default function Home() {
                 <div style={{ opacity: 0.7 }}>EMA 200</div>
                 <div style={{ fontWeight: 700, fontSize: 18 }}>
                   {formatUSD(signal.ema200)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ opacity: 0.7 }}>Última actualización</div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>
+                  {new Date(signal.at).toLocaleString()}
                 </div>
               </div>
             </div>
