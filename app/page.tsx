@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "loading" | "ok" | "error";
 type MarketPoint = { t: number; p: number };
-
 type Action = "BUY" | "SELL" | "NONE";
 
 type SignalPayload = {
@@ -16,10 +15,6 @@ type SignalPayload = {
   rsi14: number;
   ema50: number;
   ema200: number;
-  change1h: number;
-  change24h: number;
-  rebound2h: number;
-  reason: string[];
 };
 
 function formatUSD(n: number) {
@@ -30,35 +25,6 @@ function formatUSD(n: number) {
   }).format(n);
 }
 
-function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
-  const xs = points.map((d) => d.t);
-  const ys = points.map((d) => d.p);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  const scaleX = (x: number) =>
-    pad + ((x - minX) / Math.max(1, maxX - minX)) * (w - pad * 2);
-
-  const scaleY = (y: number) =>
-    h - pad - ((y - minY) / Math.max(1, maxY - minY)) * (h - pad * 2);
-
-  return points
-    .map(
-      (d, i) =>
-        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`
-    )
-    .join(" ");
-}
-
-async function fetchJSON(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
-  const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(`${url} -> ${res.status}: ${text}`);
-  return JSON.parse(text);
-}
-
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
@@ -66,277 +32,38 @@ function clamp(n: number, a: number, b: number) {
 function headlineFromAction(action: Action) {
   if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
   if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
-  return "ℹ️ Señal detectada";
+  return "";
 }
 
-/** ✅ Decide si el cambio de precio es "real" para volver a alertar */
-function hasMeaningfulMove(newPrice: number, lastPrice: number | null) {
-  if (!Number.isFinite(newPrice)) return false;
-  if (lastPrice === null || !Number.isFinite(lastPrice)) return true;
-
-  const diff = Math.abs(newPrice - lastPrice);
-  const pct = lastPrice > 0 ? (diff / lastPrice) * 100 : 0;
-
-  const MIN_PCT = 0.25; // 0.25%
-  const MIN_USD = 80; // $80
-
-  return pct >= MIN_PCT || diff >= MIN_USD;
-}
-
-/** ✅ Firma anti-spam para evitar repetir por "at" cambiante */
-function makeSignature(sig: SignalPayload) {
-  const bucket = Math.round((sig.price || 0) / 10) * 10; // cada $10
-  return `${sig.action}|${bucket}|${Math.round(sig.score || 0)}`;
+async function fetchJSON(url: string) {
+  const res = await fetch(url, { cache: "no-store" });
+  const text = await res.text().catch(() => "");
+  if (!res.ok) throw new Error(text);
+  return JSON.parse(text);
 }
 
 export default function Home() {
+  const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
-  const [price, setPrice] = useState<number | null>(null);
-  const [chg24, setChg24] = useState<number | null>(null);
-  const [series, setSeries] = useState<MarketPoint[]>([]);
-  const [updatedAt, setUpdatedAt] = useState("");
-  const [debug, setDebug] = useState("");
 
-  // 🔔 Alertas
-  const [alertsEnabled, setAlertsEnabled] = useState(false);
-  const [alert, setAlert] = useState<SignalPayload | null>(null);
-  const [alertToastOpen, setAlertToastOpen] = useState(false);
-
-  const lastAlertAtRef = useRef<number>(0);
-  const lastSeenSignalAtRef = useRef<number>(0);
-
-  // ✅ Anti-spam extra
-  const lastAlertSigRef = useRef<string>("");
-  const lastAlertPriceRef = useRef<number | null>(null);
-  const lastAlertActionRef = useRef<Action>("NONE");
-
-  // AudioContext se crea solo con gesto del usuario
-  const audioCtxRef = useRef<AudioContext | null>(null);
-
-  // ✅ Debug / pruebas
-  const [forceMode, setForceMode] = useState(false);
-  const [signalURL, setSignalURL] = useState("/api/signal");
-  const [lastSignalRaw, setLastSignalRaw] = useState<any>(null);
-  const [lastSignalInfo, setLastSignalInfo] = useState<string>("");
-
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const fm = sp.get("force") === "1";
-      setForceMode(fm);
-      setSignalURL(fm ? "/api/signal?force=1" : "/api/signal");
-    } catch {
-      setForceMode(false);
-      setSignalURL("/api/signal");
-    }
-  }, []);
-
-  function playBeep() {
-    try {
-      const AudioContextImpl =
-        (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextImpl) return;
-
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContextImpl();
-
-      const ctx = audioCtxRef.current;
-      if (!ctx) return;
-
-      if (ctx.state === "suspended") {
-        ctx.resume().catch(() => {});
-      }
-
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-
-      o.type = "sine";
-      o.frequency.value = 880;
-
-      g.gain.value = 0.0001;
-      g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
-
-      o.connect(g);
-      g.connect(ctx.destination);
-
-      o.start();
-      o.stop(ctx.currentTime + 0.2);
-    } catch {}
-  }
-
-  function vibrate(pattern: number | number[]) {
-    try {
-      if ("vibrate" in navigator) (navigator as any).vibrate(pattern);
-    } catch {}
-  }
-
-  async function refresh() {
+  async function loadSignal() {
     try {
       setStatus("loading");
-      setDebug("");
-
-      const [btc, chart, c24] = await Promise.all([
-        fetchJSON("/api/btc"),
-        fetchJSON("/api/btc-chart"),
-        (async () => {
-          try {
-            return await fetchJSON("/api/btc24h");
-          } catch {
-            return { chg: null };
-          }
-        })(),
-      ]);
-
-      const usd = Number(btc?.usd);
-      const chg = c24?.chg === null ? null : Number(c24?.chg);
-
-      const prices: [number, number][] = chart?.prices;
-      const pts = Array.isArray(prices)
-        ? prices
-            .map(([t, p]) => ({ t: Number(t), p: Number(p) }))
-            .filter((d) => Number.isFinite(d.t) && Number.isFinite(d.p))
-        : [];
-
-      if (!Number.isFinite(usd)) throw new Error("Precio inválido");
-      if (!pts.length) throw new Error("No llegó serie de gráfico");
-
-      setPrice(usd);
-      setChg24(Number.isFinite(chg as any) ? (chg as number) : null);
-      setSeries(pts);
-
-      setUpdatedAt(new Date().toLocaleString());
+      const s = await fetchJSON("/api/signal");
+      setSignal(s?.lastSignal ?? null);
       setStatus("ok");
-    } catch (e: any) {
+    } catch {
       setStatus("error");
-      setDebug(String(e?.message ?? e));
-    }
-  }
-
-  function openAlert(sig: SignalPayload) {
-    setAlert(sig);
-    setAlertToastOpen(true);
-
-    // ✅ Guardar anti-spam
-    lastAlertSigRef.current = makeSignature(sig);
-    lastAlertPriceRef.current = Number.isFinite(sig.price) ? sig.price : null;
-    lastAlertActionRef.current = sig.action;
-
-    if (alertsEnabled) {
-      vibrate([120, 80, 120, 80, 180]);
-      playBeep();
-
-      if ("Notification" in window) {
-        if (Notification.permission === "granted") {
-          new Notification(headlineFromAction(sig.action), {
-            body: `Precio ${sig.price ? formatUSD(sig.price) : ""}`,
-          });
-        }
-      }
-    }
-  }
-
-  /**
-   * ✅ pollSignal
-   * - Automático: respeta anti-spam
-   * - Manual (botones): SIEMPRE abre popup si verdict=true (no anti-spam)
-   */
-  async function pollSignal(customURL?: string, manual = false) {
-    try {
-      const url = customURL || signalURL;
-
-      const s = await fetchJSON(url);
-      setLastSignalRaw(s);
-
-      const sig: SignalPayload | null = s?.lastSignal ?? null;
-      if (!sig || !sig.at) {
-        setLastSignalInfo("No llegó lastSignal.");
-        return;
-      }
-
-      setLastSignalInfo(
-        `OK: verdict=${sig.verdict} action=${sig.action} score=${sig.score} at=${sig.at} (URL=${url})`
-      );
-
-      // Para automático: evita reprocesar señales reales por "at"
-      if (!forceMode && !manual) {
-        if (sig.at <= lastSeenSignalAtRef.current) return;
-        lastSeenSignalAtRef.current = sig.at;
-      }
-
-      if (!sig.verdict) return;
-      if (!sig.action || sig.action === "NONE") return;
-
-      // ✅ Si es prueba MANUAL, abrimos siempre (aunque sea misma señal)
-      if (manual) {
-        openAlert(sig);
-        return;
-      }
-
-      // ✅ Anti-spam (solo automático)
-      const sigKey = makeSignature(sig);
-      if (sigKey === lastAlertSigRef.current) return;
-
-      const sameAction = sig.action === lastAlertActionRef.current;
-      if (sameAction && !hasMeaningfulMove(sig.price, lastAlertPriceRef.current)) {
-        return;
-      }
-
-      const now = Date.now();
-      const cooldownMs = forceMode ? 0 : 60 * 60 * 1000;
-      const minScore = forceMode ? 0 : 80;
-
-      if (now - lastAlertAtRef.current < cooldownMs) return;
-      if (sig.score < minScore) return;
-
-      lastAlertAtRef.current = now;
-      openAlert(sig);
-    } catch (e: any) {
-      setLastSignalInfo(`ERROR pollSignal: ${String(e?.message ?? e)}`);
     }
   }
 
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 60_000);
+    loadSignal();
+    const id = setInterval(loadSignal, 60_000);
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    pollSignal();
-    const id = setInterval(() => pollSignal(), 30_000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertsEnabled, forceMode, signalURL]);
-
-  const path = useMemo(() => (series.length ? makePath(series) : ""), [series]);
-  const changeColor = (chg24 ?? 0) >= 0 ? "#22c55e" : "#ef4444";
-
-  async function enableAlerts() {
-    setAlertsEnabled(true);
-    playBeep();
-
-    if ("Notification" in window) {
-      try {
-        if (Notification.permission === "default") {
-          await Notification.requestPermission();
-        }
-      } catch {}
-    }
-  }
-
-  const scoreBar = alert ? clamp(alert.score, 0, 100) : 0;
-
-  const headerBg =
-    alert?.action === "SELL"
-      ? "rgba(239, 68, 68, 0.15)"
-      : "rgba(34, 197, 94, 0.15)";
-
-  const headerBorder =
-    alert?.action === "SELL"
-      ? "1px solid rgba(239, 68, 68, 0.35)"
-      : "1px solid rgba(34, 197, 94, 0.35)";
-
-  const headerBadgeColor = alert?.action === "SELL" ? "#fca5a5" : "#86efac";
+  const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
   return (
     <main
@@ -349,283 +76,50 @@ export default function Home() {
       }}
     >
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
+        <h1 style={{ fontSize: 26, marginBottom: 20 }}>
+          ₿ BTCALERT – Panel Inteligente
+        </h1>
 
-        {/* DEBUG / PRUEBAS */}
-        <div
-          style={{
-            border: "1px solid #334155",
-            borderRadius: 14,
-            background: "#0b1220",
-            padding: 12,
-            marginBottom: 12,
-            fontSize: 12,
-            opacity: 0.95,
-          }}
-        >
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <div>
-              URL señal usada por la app: <b style={{ color: "#60a5fa" }}>{signalURL}</b>
-            </div>
-            <div>
-              Modo prueba:{" "}
-              <b style={{ color: forceMode ? "#22c55e" : "#fbbf24" }}>
-                {forceMode ? "ON (?force=1)" : "OFF"}
-              </b>
-            </div>
-          </div>
+        {status === "loading" && <p>Cargando datos...</p>}
+        {status === "error" && <p>Error cargando señal.</p>}
 
-          <div style={{ marginTop: 8, whiteSpace: "pre-wrap", opacity: 0.9 }}>
-            {lastSignalInfo || "Esperando primer poll…"}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={() => pollSignal(undefined, true)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #334155",
-                background: "#111827",
-                color: "#e5e7eb",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              🔄 Poll ahora
-            </button>
-
-            <button
-              onClick={() => pollSignal("/api/signal?force=1&action=BUY", true)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #334155",
-                background: "#111827",
-                color: "#e5e7eb",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              🧪 Forzar BUY desde API
-            </button>
-
-            <button
-              onClick={() => pollSignal("/api/signal?force=1&action=SELL", true)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                border: "1px solid #334155",
-                background: "#111827",
-                color: "#e5e7eb",
-                cursor: "pointer",
-                fontWeight: 800,
-              }}
-            >
-              🧪 Forzar SELL desde API
-            </button>
-          </div>
-        </div>
-
-        {/* Barra superior */}
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Alertas:{" "}
-            <span
-              style={{
-                fontWeight: 700,
-                color: alertsEnabled ? "#22c55e" : "#fbbf24",
-              }}
-            >
-              {alertsEnabled ? "ACTIVAS" : "INACTIVAS"}
-            </span>
-            <span style={{ opacity: 0.7 }}> • Poll señal: 30s</span>
-          </div>
-
-          <button
-            onClick={enableAlerts}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #334155",
-              background: alertsEnabled ? "#0f172a" : "#111827",
-              color: "#e5e7eb",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            🔔 Activar alertas
-          </button>
-        </div>
-
-        <div
-          style={{
-            border: "1px solid #1f2937",
-            borderRadius: 16,
-            padding: 16,
-            background: "#0f172a",
-          }}
-        >
-          {status === "loading" && <p>Cargando precio y gráfico…</p>}
-
-          {status === "error" && (
-            <div>
-              <p style={{ color: "#fca5a5" }}>No se pudo cargar. Reintenta.</p>
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#0b1220",
-                  fontSize: 12,
-                  whiteSpace: "pre-wrap",
-                  opacity: 0.9,
-                }}
-              >
-                {debug || "Sin detalle"}
-              </div>
-              <button
-                onClick={refresh}
-                style={{
-                  marginTop: 12,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {status === "ok" && price != null && (
-            <>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
-                <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
-
-                <div style={{ fontSize: 16 }}>
-                  Cambio 24h:{" "}
-                  {chg24 === null ? (
-                    <span style={{ opacity: 0.7 }}>--</span>
-                  ) : (
-                    <span style={{ color: changeColor, fontWeight: 700 }}>
-                      {chg24 >= 0 ? "+" : ""}
-                      {chg24.toFixed(2)}%
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12, opacity: 0.75, fontSize: 12 }}>
-                Actualizado: {updatedAt} • Auto: cada 1 min
-              </div>
-
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>Últimas 24h</div>
-                <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
-                  <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
-                </svg>
-              </div>
-
-              <button
-                onClick={refresh}
-                style={{
-                  marginTop: 10,
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                }}
-              >
-                Actualizar ahora
-              </button>
-
-              <p style={{ opacity: 0.6, fontSize: 12, marginTop: 14 }}>Build Test 🚀</p>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Popup */}
-      {alertToastOpen && alert && (
-        <div
-          onClick={() => setAlertToastOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            padding: 18,
-            zIndex: 50,
-          }}
-        >
+        {signal && (
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(720px, 100%)",
               borderRadius: 18,
-              border: "1px solid #334155",
-              background: "#0b1220",
-              padding: 16,
-              boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
+              padding: 20,
+              background: "#0f172a",
+              border: "1px solid #1f2937",
             }}
           >
+            {/* TITULO */}
             <div
               style={{
-                borderRadius: 14,
-                padding: "10px 12px",
-                background: headerBg,
-                border: headerBorder,
-                marginBottom: 12,
+                fontWeight: 900,
+                fontSize: 18,
+                marginBottom: 20,
+                color:
+                  signal.action === "SELL" ? "#f87171" : "#4ade80",
               }}
             >
-              <div style={{ fontWeight: 900, fontSize: 16 }}>
-                <span style={{ color: headerBadgeColor }}>
-                  {headlineFromAction(alert.action)}
-                </span>
-              </div>
-              <div style={{ opacity: 0.85, fontSize: 12, marginTop: 2 }}>
-                {new Date(alert.at).toLocaleString()}
-              </div>
+              {headlineFromAction(signal.action)}
             </div>
 
-            <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 12 }}>
-              <div style={{ fontSize: 28, fontWeight: 900 }}>{formatUSD(alert.price)}</div>
-              <div style={{ fontSize: 14, opacity: 0.9 }}>
-                <div>
-                  Score: <b>{alert.score}/100</b> • RSI(14): <b>{alert.rsi14.toFixed(1)}</b>
-                </div>
-                <div style={{ marginTop: 4, opacity: 0.9 }}>
-                  1h: <b>{alert.change1h.toFixed(2)}%</b> • 24h:{" "}
-                  <b>{alert.change24h.toFixed(2)}%</b> • Rebote 2h:{" "}
-                  <b>{alert.rebound2h.toFixed(2)}%</b>
-                </div>
-              </div>
+            {/* PRECIO GRANDE */}
+            <div style={{ fontSize: 40, fontWeight: 900 }}>
+              {formatUSD(signal.price)}
             </div>
 
-            <div style={{ marginTop: 12 }}>
+            {/* SCORE BAR */}
+            <div style={{ marginTop: 20 }}>
+              <div style={{ marginBottom: 6 }}>
+                Score: <b>{signal.score}/100</b>
+              </div>
               <div
                 style={{
-                  height: 10,
+                  height: 12,
                   borderRadius: 999,
                   background: "#111827",
-                  border: "1px solid #1f2937",
                   overflow: "hidden",
                 }}
               >
@@ -633,72 +127,50 @@ export default function Home() {
                   style={{
                     height: "100%",
                     width: `${scoreBar}%`,
-                    background: alert.score >= 80 ? "#22c55e" : "#fbbf24",
+                    background:
+                      scoreBar >= 75
+                        ? "#22c55e"
+                        : scoreBar >= 50
+                        ? "#fbbf24"
+                        : "#ef4444",
                   }}
                 />
               </div>
-              <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>
-                Razones: {alert.reason?.slice(0, 8).join(" • ") || "—"}
+            </div>
+
+            {/* INDICADORES LIMPIOS */}
+            <div
+              style={{
+                marginTop: 25,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 16,
+              }}
+            >
+              <div>
+                <div style={{ opacity: 0.7 }}>RSI (14)</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {signal.rsi14.toFixed(2)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ opacity: 0.7 }}>EMA 50</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {formatUSD(signal.ema50)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ opacity: 0.7 }}>EMA 200</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>
+                  {formatUSD(signal.ema200)}
+                </div>
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              <button
-                onClick={() => {
-                  if (!alertsEnabled) enableAlerts();
-                  vibrate([120, 80, 120]);
-                  playBeep();
-                }}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#111827",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                }}
-              >
-                Probar sonido/vibración
-              </button>
-
-              <button
-                onClick={() => setAlertToastOpen(false)}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #334155",
-                  background: "#0f172a",
-                  color: "#e5e7eb",
-                  cursor: "pointer",
-                  fontWeight: 800,
-                }}
-              >
-                Ok, entendido
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-
-      {/* RAW debug */}
-      {lastSignalRaw && (
-        <div
-          style={{
-            maxWidth: 780,
-            margin: "12px auto 0",
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid #334155",
-            background: "#0b1220",
-            fontSize: 12,
-            opacity: 0.9,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {JSON.stringify(lastSignalRaw, null, 2)}
-        </div>
-      )}
+        )}
+      </div>
     </main>
   );
 }
