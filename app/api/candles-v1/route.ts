@@ -34,12 +34,14 @@ async function fetchCryptoCompareCandles(limit: number) {
   if (apiKey) url.searchParams.set("api_key", apiKey);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
+
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`CryptoCompare ${res.status}: ${txt.slice(0, 180)}`);
   }
 
   const json = (await res.json()) as CCResp;
+
   if (json.Response && json.Response !== "Success") {
     throw new Error(`CryptoCompare error: ${json.Message || "Unknown"}`);
   }
@@ -87,4 +89,3 @@ export async function GET(req: Request) {
     );
   }
 }
-
