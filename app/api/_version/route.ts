@@ -1,9 +1,9 @@
+import { NextResponse } from "next/server";
+
 export async function GET() {
-  return Response.json({
+  return NextResponse.json({
     ok: true,
-    sha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-    ref: process.env.VERCEL_GIT_COMMIT_REF || null,
-    message: process.env.VERCEL_GIT_COMMIT_MESSAGE || null,
+    marker: "BTC-CRON-DEPLOY-VERIFY-V1",
+    time: new Date().toISOString(),
   });
 }
-
