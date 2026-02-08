@@ -7,7 +7,7 @@ type CCResp = {
   Message?: string;
   Data?: {
     Data?: Array<{
-      time: number; // unix seconds
+      time: number;
       open: number;
       high: number;
       low: number;
@@ -17,7 +17,7 @@ type CCResp = {
 };
 
 type Candle = {
-  t: number; // epoch ms
+  t: number;
   o: number;
   h: number;
   l: number;
@@ -35,22 +35,27 @@ async function fetchCryptoCompareCandles(limit: number) {
   if (apiKey) url.searchParams.set("api_key", apiKey);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
+
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`CryptoCompare ${res.status}: ${txt.slice(0, 180)}`);
   }
 
   const json = (await res.json()) as CCResp;
+
   if (json.Response && json.Response !== "Success") {
     throw new Error(`CryptoCompare error: ${json.Message || "Unknown"}`);
   }
 
   const rows = json.Data?.Data || [];
-  if (!rows.length) throw new Error("CryptoCompare: sin velas");
+
+  if (!rows.length) {
+    throw new Error("No llegaron velas desde CryptoCompare");
+  }
 
   const candles: Candle[] = rows
     .map((r) => ({
-      t: Number(r.time) * 1000,
+      t: r.time * 1000,
       o: Number(r.open),
       h: Number(r.high),
       l: Number(r.low),
@@ -81,7 +86,7 @@ export async function GET(req: Request) {
     const candles = await fetchCryptoCompareCandles(limit);
 
     return NextResponse.json(
-      { ok: true, candles, source: "CryptoCompare", limit },
+      { ok: true, candles, limit },
       { status: 200 }
     );
   } catch (e: any) {
