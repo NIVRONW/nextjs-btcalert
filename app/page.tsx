@@ -36,7 +36,6 @@ async function fetchJSON(url: string) {
 }
 
 function getBanner(signal: SignalPayload) {
-  // Regla: si no hay veredicto, lo tratamos como "sin señal clara"
   if (!signal.verdict || signal.action === "NONE") {
     return {
       text: "🟡 Sin señal clara",
@@ -53,11 +52,38 @@ function getBanner(signal: SignalPayload) {
     };
   }
 
-  // BUY
   return {
     text: "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢",
     color: "#4ade80",
     sub: "Se detectaron condiciones de entrada.",
+  };
+}
+
+function getPanelStyle(signal: SignalPayload) {
+  // Neutro si no hay señal clara
+  const isNeutral = !signal.verdict || signal.action === "NONE";
+
+  if (isNeutral) {
+    return {
+      background:
+        "radial-gradient(1200px 500px at 20% 0%, rgba(96,165,250,0.18), rgba(15,23,42,1) 60%)",
+      border: "1px solid #1f2937",
+    };
+  }
+
+  if (signal.action === "SELL") {
+    return {
+      background:
+        "radial-gradient(1200px 500px at 20% 0%, rgba(248,113,113,0.20), rgba(15,23,42,1) 60%)",
+      border: "1px solid rgba(248,113,113,0.35)",
+    };
+  }
+
+  // BUY
+  return {
+    background:
+      "radial-gradient(1200px 500px at 20% 0%, rgba(74,222,128,0.18), rgba(15,23,42,1) 60%)",
+    border: "1px solid rgba(74,222,128,0.30)",
   };
 }
 
@@ -84,6 +110,7 @@ export default function Home() {
 
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
   const banner = signal ? getBanner(signal) : null;
+  const panelStyle = signal ? getPanelStyle(signal) : null;
 
   return (
     <main
@@ -103,13 +130,14 @@ export default function Home() {
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p>Error cargando señal.</p>}
 
-        {signal && banner && (
+        {signal && banner && panelStyle && (
           <div
             style={{
               borderRadius: 18,
               padding: 20,
-              background: "#0f172a",
-              border: "1px solid #1f2937",
+              background: panelStyle.background,
+              border: panelStyle.border,
+              boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
             }}
           >
             {/* BANNER */}
@@ -142,8 +170,9 @@ export default function Home() {
                 style={{
                   height: 12,
                   borderRadius: 999,
-                  background: "#111827",
+                  background: "rgba(17,24,39,0.85)",
                   overflow: "hidden",
+                  border: "1px solid rgba(148,163,184,0.15)",
                 }}
               >
                 <div
