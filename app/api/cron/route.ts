@@ -215,12 +215,12 @@ export async function POST(req: Request) {
 const msg =
   `<b>${escapeHTML(headline)}</b>\n\n` +
   `<b>Precio actual:</b> $${price.toFixed(2)}\n\n` +
-  `<b>¿Por qué?</b>\n` +
-  `${reasons.slice(0, 4).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
-  `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
+  `<b>Motivo:</b>\n` +
+  `${reasons.slice(0, 3).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
+  `<b>Fecha y hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
   (force ? `\n\n<b>Modo:</b> PRUEBA` : "");
 
-      telegram = await sendTelegramHTML(msg);
+telegram = await sendTelegramHTML(msg);
     }
 
     return json({
