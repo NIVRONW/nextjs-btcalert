@@ -19,6 +19,8 @@ type SignalPayload = {
   reason: string[];
 };
 
+type Action = "BUY" | "SELL" | "NONE";
+
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -44,7 +46,9 @@ function makePath(points: MarketPoint[], w = 520, h = 160, pad = 10) {
   return points
     .map(
       (d, i) =>
-        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(2)}`
+        `${i === 0 ? "M" : "L"} ${scaleX(d.t).toFixed(2)} ${scaleY(d.p).toFixed(
+          2
+        )}`
     )
     .join(" ");
 }
@@ -58,6 +62,13 @@ async function fetchJSON(url: string) {
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
+}
+
+function detectActionFromReason(reason: string[] | undefined | null): Action {
+  const txt = (reason || []).join(" ").toLowerCase();
+  if (txt.includes("venta") || txt.includes("sell") || txt.includes("🔴")) return "SELL";
+  if (txt.includes("compra") || txt.includes("buy") || txt.includes("🟢")) return "BUY";
+  return "NONE";
 }
 
 export default function Home() {
@@ -189,8 +200,14 @@ export default function Home() {
 
       if ("Notification" in window) {
         if (Notification.permission === "granted") {
-          new Notification("BTC: Zona de entrada", {
-            body: `Score ${sig.score}/100 · Precio $${sig.price.toFixed(2)}`,
+          const action = detectActionFromReason(sig.reason);
+          const title =
+            action === "SELL"
+              ? "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴"
+              : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
+
+          new Notification(title, {
+            body: `Precio ${sig.price ? formatUSD(sig.price) : ""}`,
           });
         }
       }
@@ -211,8 +228,10 @@ export default function Home() {
         return;
       }
 
+      const action = detectActionFromReason(sig.reason);
+
       setLastSignalInfo(
-        `OK: verdict=${sig.verdict} score=${sig.score} at=${sig.at} (URL=${url})`
+        `OK: verdict=${sig.verdict} score=${sig.score} action=${action} at=${sig.at} (URL=${url})`
       );
 
       // Evita re-procesar la misma señal
@@ -268,6 +287,24 @@ export default function Home() {
   }
 
   const scoreBar = alert ? clamp(alert.score, 0, 100) : 0;
+  const alertAction = alert ? detectActionFromReason(alert.reason) : "NONE";
+
+  const headerText =
+    alertAction === "SELL"
+      ? "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴"
+      : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
+
+  const headerBg =
+    alertAction === "SELL"
+      ? "rgba(239, 68, 68, 0.15)" // rojo suave
+      : "rgba(34, 197, 94, 0.15)"; // verde suave
+
+  const headerBorder =
+    alertAction === "SELL"
+      ? "1px solid rgba(239, 68, 68, 0.35)"
+      : "1px solid rgba(34, 197, 94, 0.35)";
+
+  const headerBadgeColor = alertAction === "SELL" ? "#fca5a5" : "#86efac";
 
   return (
     <main
@@ -294,9 +331,12 @@ export default function Home() {
             opacity: 0.95,
           }}
         >
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}
+          >
             <div>
-              URL señal usada por la app: <b style={{ color: "#60a5fa" }}>{signalURL}</b>
+              URL señal usada por la app:{" "}
+              <b style={{ color: "#60a5fa" }}>{signalURL}</b>
             </div>
             <div>
               Modo prueba:{" "}
@@ -354,7 +394,7 @@ export default function Home() {
                   change1h: 0,
                   change24h: 0,
                   rebound2h: 0,
-                  reason: ["TEST: popup directo (sin API)"],
+                  reason: ["🟢 COMPRA", "TEST: popup directo (sin API)"],
                 })
               }
               style={{
@@ -367,7 +407,36 @@ export default function Home() {
                 fontWeight: 800,
               }}
             >
-              🚨 Probar alerta ahora
+              🚨 Probar alerta ahora (COMPRA)
+            </button>
+
+            <button
+              onClick={() =>
+                openAlert({
+                  at: Date.now(),
+                  verdict: true,
+                  score: 99,
+                  price: price ?? 0,
+                  rsi14: 50,
+                  ema50: 0,
+                  ema200: 0,
+                  change1h: 0,
+                  change24h: 0,
+                  rebound2h: 0,
+                  reason: ["🔴 VENTA", "TEST: popup directo (sin API)"],
+                })
+              }
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #334155",
+                background: "#111827",
+                color: "#e5e7eb",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+            >
+              🚨 Probar alerta ahora (VENTA)
             </button>
           </div>
         </div>
@@ -490,11 +559,7 @@ export default function Home() {
                 <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
                   Últimas 24h
                 </div>
-                <svg
-                  width="100%"
-                  viewBox="0 0 520 160"
-                  style={{ display: "block" }}
-                >
+                <svg width="100%" viewBox="0 0 520 160" style={{ display: "block" }}>
                   <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2" />
                 </svg>
               </div>
@@ -548,16 +613,27 @@ export default function Home() {
               boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
             }}
           >
+            {/* Header COMPRA/VENTA con color */}
             <div
-              style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
+              style={{
+                borderRadius: 14,
+                padding: "10px 12px",
+                background: headerBg,
+                border: headerBorder,
+                marginBottom: 12,
+              }}
             >
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>
-                  📌 BTC: Zona de entrada detectada
-                </div>
-                <div style={{ opacity: 0.8, fontSize: 12, marginTop: 2 }}>
-                  {new Date(alert.at).toLocaleString()}
-                </div>
+              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                <span style={{ color: headerBadgeColor }}>{headerText}</span>
+              </div>
+              <div style={{ opacity: 0.85, fontSize: 12, marginTop: 2 }}>
+                {new Date(alert.at).toLocaleString()}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ opacity: 0.85, fontSize: 12 }}>
+                Señal detectada por el sistema
               </div>
 
               <button
@@ -611,7 +687,7 @@ export default function Home() {
                 />
               </div>
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>
-                Razones: {alert.reason?.slice(0, 4).join(" • ") || "—"}
+                Razones: {alert.reason?.slice(0, 6).join(" • ") || "—"}
               </div>
             </div>
 
