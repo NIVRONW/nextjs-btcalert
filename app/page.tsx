@@ -10,7 +10,7 @@ type Action = "BUY" | "SELL" | "NONE";
 type SignalPayload = {
   at: number;
   verdict: boolean;
-  action: Action; // ✅ NUEVO (viene de /api/signal)
+  action: Action;
   score: number;
   price: number;
   rsi14: number;
@@ -66,8 +66,29 @@ function clamp(n: number, a: number, b: number) {
 function headlineFromAction(action: Action) {
   if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
   if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
-  // si llega NONE (no debería abrir popup), por si acaso:
   return "ℹ️ Señal detectada";
+}
+
+/** ✅ Decide si el cambio de precio es "real" para volver a alertar */
+function hasMeaningfulMove(newPrice: number, lastPrice: number | null) {
+  if (!Number.isFinite(newPrice)) return false;
+  if (lastPrice === null || !Number.isFinite(lastPrice)) return true;
+
+  const diff = Math.abs(newPrice - lastPrice);
+  const pct = lastPrice > 0 ? (diff / lastPrice) * 100 : 0;
+
+  // Ajusta aquí si quieres más/menos sensibilidad
+  const MIN_PCT = 0.25; // 0.25%
+  const MIN_USD = 80; // $80
+
+  return pct >= MIN_PCT || diff >= MIN_USD;
+}
+
+/** ✅ Firma anti-spam para evitar repetir por "at" cambiante */
+function makeSignature(sig: SignalPayload) {
+  // “bucket” del precio para no disparar por centavos
+  const bucket = Math.round((sig.price || 0) / 10) * 10; // cada $10
+  return `${sig.action}|${bucket}|${Math.round(sig.score || 0)}`;
 }
 
 export default function Home() {
@@ -83,13 +104,18 @@ export default function Home() {
   const [alert, setAlert] = useState<SignalPayload | null>(null);
   const [alertToastOpen, setAlertToastOpen] = useState(false);
 
-  const lastAlertAtRef = useRef<number>(0); // cooldown
-  const lastSeenSignalAtRef = useRef<number>(0);
+  const lastAlertAtRef = useRef<number>(0); // cooldown base
+  const lastSeenSignalAtRef = useRef<number>(0); // evita reprocesar señales reales
+
+  // ✅ Anti-spam extra (clave para tu caso)
+  const lastAlertSigRef = useRef<string>(""); // no repetir misma firma
+  const lastAlertPriceRef = useRef<number | null>(null); // no repetir si no se movió el precio
+  const lastAlertActionRef = useRef<Action>("NONE"); // no repetir misma acción sin cambios
 
   // AudioContext se crea solo con gesto del usuario
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // ✅ Debug visible
+  // ✅ Debug / pruebas
   const [forceMode, setForceMode] = useState(false);
   const [signalURL, setSignalURL] = useState("/api/signal");
   const [lastSignalRaw, setLastSignalRaw] = useState<any>(null);
@@ -192,6 +218,11 @@ export default function Home() {
     setAlert(sig);
     setAlertToastOpen(true);
 
+    // ✅ Guardar anti-spam
+    lastAlertSigRef.current = makeSignature(sig);
+    lastAlertPriceRef.current = Number.isFinite(sig.price) ? sig.price : null;
+    lastAlertActionRef.current = sig.action;
+
     // Sonido + vibración solo si activaste alertas
     if (alertsEnabled) {
       vibrate([120, 80, 120, 80, 180]);
@@ -225,19 +256,29 @@ export default function Home() {
         `OK: verdict=${sig.verdict} action=${sig.action} score=${sig.score} at=${sig.at} (URL=${url})`
       );
 
-      // Evita re-procesar la misma señal
-      if (sig.at <= lastSeenSignalAtRef.current) return;
-      lastSeenSignalAtRef.current = sig.at;
+      // ✅ Para señales reales: evita reprocesar la misma (at)
+      // Nota: en force=1 el "at" cambia siempre, por eso abajo usamos anti-spam por firma/precio
+      if (!forceMode) {
+        if (sig.at <= lastSeenSignalAtRef.current) return;
+        lastSeenSignalAtRef.current = sig.at;
+      }
 
-      // Si no es veredicto positivo, no alertamos
       if (!sig.verdict) return;
-
-      // Si action es NONE, no alertamos (seguro)
       if (!sig.action || sig.action === "NONE") return;
+
+      // ✅ Anti-spam: no repetir si es “la misma señal”
+      const sigKey = makeSignature(sig);
+      if (sigKey === lastAlertSigRef.current) return;
+
+      // ✅ Anti-spam: si la acción no cambió y el precio no se movió “real”, NO alertar
+      const sameAction = sig.action === lastAlertActionRef.current;
+      if (sameAction && !hasMeaningfulMove(sig.price, lastAlertPriceRef.current)) {
+        return;
+      }
 
       const now = Date.now();
 
-      // ✅ En modo force, NO bloqueamos por cooldown / score
+      // Cooldown (mantiene seguridad). En force dejamos 0, pero anti-spam sigue activo.
       const cooldownMs = forceMode ? 0 : 60 * 60 * 1000;
       const minScore = forceMode ? 0 : 80;
 
@@ -550,7 +591,6 @@ export default function Home() {
               boxShadow: "0 18px 60px rgba(0,0,0,0.45)",
             }}
           >
-            {/* Header COMPRA/VENTA con color */}
             <div
               style={{
                 borderRadius: 14,
@@ -561,7 +601,9 @@ export default function Home() {
               }}
             >
               <div style={{ fontWeight: 900, fontSize: 16 }}>
-                <span style={{ color: headerBadgeColor }}>{headerText}</span>
+                <span style={{ color: headerBadgeColor }}>
+                  {headlineFromAction(alert.action)}
+                </span>
               </div>
               <div style={{ opacity: 0.85, fontSize: 12, marginTop: 2 }}>
                 {new Date(alert.at).toLocaleString()}
@@ -595,13 +637,13 @@ export default function Home() {
                 <div
                   style={{
                     height: "100%",
-                    width: `${scoreBar}%`,
-                    background: scoreBar >= 80 ? "#22c55e" : "#fbbf24",
+                    width: `${clamp(alert.score, 0, 100)}%`,
+                    background: alert.score >= 80 ? "#22c55e" : "#fbbf24",
                   }}
                 />
               </div>
               <div style={{ fontSize: 12, opacity: 0.8, marginTop: 8 }}>
-                Razones: {alert.reason?.slice(0, 6).join(" • ") || "—"}
+                Razones: {alert.reason?.slice(0, 8).join(" • ") || "—"}
               </div>
             </div>
 
