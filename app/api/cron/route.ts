@@ -231,18 +231,17 @@ export async function POST(req: Request) {
     const shouldSend = force || (verdict && score >= 80);
 
     if (shouldSend) {
-      const headline = force
-        : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
+  const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
 
-      const html = buildTelegramHTML({
-        headline,
-        price: payload.price,
-        reasons: payload.reason,
-        at: payload.at,
-      });
+  const msg =
+    `<b>${headline}</b>\n\n` +
+    `<b>Precio actual:</b> $${payload.price.toFixed(2)}\n\n` +
+    `<b>Motivos:</b>\n` +
+    `${(payload.reason || []).slice(0, 4).map((r) => `• ${r}`).join("\n")}\n\n` +
+    `<b>Hora:</b> ${new Date(payload.at).toLocaleString()}`;
 
-      await sendTelegramHTML(html);
-    }
+  await sendTelegram(msg);
+}
 
     return NextResponse.json({ ok: true, ...payload }, { status: 200 });
   } catch (e: any) {
