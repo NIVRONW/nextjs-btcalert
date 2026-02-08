@@ -232,7 +232,6 @@ export async function POST(req: Request) {
 
     if (shouldSend) {
       const headline = force
-        ? "🧪 PRUEBA DE ALERTA"
         : "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR";
 
       const html = buildTelegramHTML({
