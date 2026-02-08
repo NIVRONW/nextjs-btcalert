@@ -34,13 +34,12 @@ async function fetchCryptoCompareCandles(limit: number) {
   if (apiKey) url.searchParams.set("api_key", apiKey);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
+  const json = (await res.json().catch(() => null)) as CCResp | null;
 
-  if (!res.ok) {
+  if (!res.ok || !json) {
     const txt = await res.text().catch(() => "");
     throw new Error(`CryptoCompare ${res.status}: ${txt.slice(0, 180)}`);
   }
-
-  const json = (await res.json()) as CCResp;
 
   if (json.Response && json.Response !== "Success") {
     throw new Error(`CryptoCompare error: ${json.Message || "Unknown"}`);
@@ -51,20 +50,13 @@ async function fetchCryptoCompareCandles(limit: number) {
 
   const candles: Candle[] = rows
     .map((r) => ({
-      t: r.time * 1000,
+      t: Number(r.time) * 1000,
       o: Number(r.open),
       h: Number(r.high),
       l: Number(r.low),
       c: Number(r.close),
     }))
-    .filter(
-      (x) =>
-        Number.isFinite(x.t) &&
-        Number.isFinite(x.o) &&
-        Number.isFinite(x.h) &&
-        Number.isFinite(x.l) &&
-        Number.isFinite(x.c)
-    );
+    .filter((x) => [x.t, x.o, x.h, x.l, x.c].every((n) => Number.isFinite(n)));
 
   return candles;
 }
@@ -73,6 +65,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
+    // 72 velas = 3 días (1h)
     const limitParam = searchParams.get("limit");
     const limit = Math.max(24, Math.min(500, Number(limitParam ?? "72") || 72));
 
