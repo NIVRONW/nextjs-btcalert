@@ -127,9 +127,15 @@ export async function POST(req: Request) {
       return json({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    // ✅ force=1 (prueba)
     const urlObj = new URL(req.url);
+
+    // ✅ force=1 (prueba)
     const force = urlObj.searchParams.get("force") === "1";
+
+    // ✅ action=BUY|SELL solo cuando force=1 (para pruebas)
+    const forcedActionRaw = (urlObj.searchParams.get("action") || "").toUpperCase();
+    const forcedAction: "BUY" | "SELL" | "" =
+      forcedActionRaw === "BUY" ? "BUY" : forcedActionRaw === "SELL" ? "SELL" : "";
 
     // ✅ Data real
     const got = await fetchHourlyBTC(240); // ~10 dias
@@ -208,24 +214,25 @@ export async function POST(req: Request) {
     // ✅ Umbral
     const VERY_GOOD_SCORE = 75;
 
-    // ✅ Señal COMPRA (tu lógica original)
+    // ✅ Señal COMPRA (tu lógica)
     const buyVerdict =
       score >= VERY_GOOD_SCORE &&
       price >= ema200 &&
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-    // ✅ Señal VENTA (simple y coherente con lo que ya calculas)
-    // (sin complicarte indicadores nuevos)
+    // ✅ Señal VENTA (simple)
     const sellVerdict =
       score >= VERY_GOOD_SCORE &&
       price < ema200 &&
       ema50 < ema200 &&
-      (rsi14 === null || rsi14 >= 55); // en bajista, rsi no muy bajo
+      (rsi14 === null || rsi14 >= 55);
 
-    const action: "BUY" | "SELL" | "NONE" = buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
+    // ✅ Acción final (si force=1 y action=BUY|SELL, se respeta)
+    const action: "BUY" | "SELL" | "NONE" =
+      force && forcedAction ? forcedAction : buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
 
-    // ✅ Enviar si force=1 o si hay oportunidad real (compra o venta)
+    // ✅ Enviar si force=1 o si hay acción real
     const shouldSend = force || action !== "NONE";
 
     let telegram: any = { ok: false, skipped: true };
