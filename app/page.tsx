@@ -79,15 +79,21 @@ export default function Home() {
   // AudioContext se crea solo con gesto del usuario
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // ✅ MODO PRUEBA: si abres la app con ?force=1, el polling usará /api/signal?force=1
+  // ✅ Debug visible
   const [forceMode, setForceMode] = useState(false);
+  const [signalURL, setSignalURL] = useState("/api/signal");
+  const [lastSignalRaw, setLastSignalRaw] = useState<any>(null);
+  const [lastSignalInfo, setLastSignalInfo] = useState<string>("");
 
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
-      setForceMode(sp.get("force") === "1");
+      const fm = sp.get("force") === "1";
+      setForceMode(fm);
+      setSignalURL(fm ? "/api/signal?force=1" : "/api/signal");
     } catch {
       setForceMode(false);
+      setSignalURL("/api/signal");
     }
   }, []);
 
@@ -121,9 +127,7 @@ export default function Home() {
 
       o.start();
       o.stop(ctx.currentTime + 0.2);
-    } catch {
-      // silencioso
-    }
+    } catch {}
   }
 
   function vibrate(pattern: number | number[]) {
@@ -174,15 +178,42 @@ export default function Home() {
     }
   }
 
+  function openAlert(sig: SignalPayload) {
+    setAlert(sig);
+    setAlertToastOpen(true);
+
+    // Sonido + vibración solo si activaste alertas
+    if (alertsEnabled) {
+      vibrate([120, 80, 120, 80, 180]);
+      playBeep();
+
+      if ("Notification" in window) {
+        if (Notification.permission === "granted") {
+          new Notification("BTC: Zona de entrada", {
+            body: `Score ${sig.score}/100 · Precio $${sig.price.toFixed(2)}`,
+          });
+        }
+      }
+    }
+  }
+
   // Lee la señal de /api/signal y dispara popup + sonido + vibración
-  async function pollSignal() {
+  async function pollSignal(customURL?: string) {
     try {
-      // ✅ aquí está el cambio clave
-      const url = forceMode ? "/api/signal?force=1" : "/api/signal";
+      const url = customURL || signalURL;
 
       const s = await fetchJSON(url);
+      setLastSignalRaw(s);
+
       const sig: SignalPayload | null = s?.lastSignal ?? null;
-      if (!sig || !sig.at) return;
+      if (!sig || !sig.at) {
+        setLastSignalInfo("No llegó lastSignal.");
+        return;
+      }
+
+      setLastSignalInfo(
+        `OK: verdict=${sig.verdict} score=${sig.score} at=${sig.at} (URL=${url})`
+      );
 
       // Evita re-procesar la misma señal
       if (sig.at <= lastSeenSignalAtRef.current) return;
@@ -191,34 +222,19 @@ export default function Home() {
       // Si no es veredicto positivo, no alertamos
       if (!sig.verdict) return;
 
-      // Cooldown: no alertar más de 1 vez cada 60 min
       const now = Date.now();
-      const cooldownMs = 60 * 60 * 1000;
-      if (now - lastAlertAtRef.current < cooldownMs) return;
 
-      // Umbral de score
-      const minScore = 80;
+      // ✅ En modo force, NO bloqueamos por cooldown / score
+      const cooldownMs = forceMode ? 0 : 60 * 60 * 1000;
+      const minScore = forceMode ? 0 : 80;
+
+      if (now - lastAlertAtRef.current < cooldownMs) return;
       if (sig.score < minScore) return;
 
       lastAlertAtRef.current = now;
-      setAlert(sig);
-      setAlertToastOpen(true);
-
-      // Vibración + sonido solo si el usuario activó alertas
-      if (alertsEnabled) {
-        vibrate([120, 80, 120, 80, 180]);
-        playBeep();
-
-        if ("Notification" in window) {
-          if (Notification.permission === "granted") {
-            new Notification("BTC: Zona de entrada", {
-              body: `Score ${sig.score}/100 · Precio $${sig.price.toFixed(2)}`,
-            });
-          }
-        }
-      }
-    } catch {
-      // silencioso
+      openAlert(sig);
+    } catch (e: any) {
+      setLastSignalInfo(`ERROR pollSignal: ${String(e?.message ?? e)}`);
     }
   }
 
@@ -230,20 +246,18 @@ export default function Home() {
 
   useEffect(() => {
     pollSignal();
-    const id = setInterval(pollSignal, 30_000);
+    const id = setInterval(() => pollSignal(), 30_000);
     return () => clearInterval(id);
-  }, [alertsEnabled, forceMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertsEnabled, forceMode, signalURL]);
 
   const path = useMemo(() => (series.length ? makePath(series) : ""), [series]);
   const changeColor = (chg24 ?? 0) >= 0 ? "#22c55e" : "#ef4444";
 
   async function enableAlerts() {
     setAlertsEnabled(true);
+    playBeep(); // desbloquea audio por gesto
 
-    // “Desbloquea” audio por gesto
-    playBeep();
-
-    // Pide permiso de notificaciones (opcional)
     if ("Notification" in window) {
       try {
         if (Notification.permission === "default") {
@@ -268,6 +282,96 @@ export default function Home() {
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
         <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
 
+        {/* 🔎 DEBUG / PRUEBAS */}
+        <div
+          style={{
+            border: "1px solid #334155",
+            borderRadius: 14,
+            background: "#0b1220",
+            padding: 12,
+            marginBottom: 12,
+            fontSize: 12,
+            opacity: 0.95,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              URL señal usada por la app: <b style={{ color: "#60a5fa" }}>{signalURL}</b>
+            </div>
+            <div>
+              Modo prueba:{" "}
+              <b style={{ color: forceMode ? "#22c55e" : "#fbbf24" }}>
+                {forceMode ? "ON (?force=1)" : "OFF"}
+              </b>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8, whiteSpace: "pre-wrap", opacity: 0.9 }}>
+            {lastSignalInfo || "Esperando primer poll…"}
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => pollSignal()}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #334155",
+                background: "#111827",
+                color: "#e5e7eb",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+            >
+              🔄 Poll ahora
+            </button>
+
+            <button
+              onClick={() => pollSignal("/api/signal?force=1")}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #334155",
+                background: "#111827",
+                color: "#e5e7eb",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+            >
+              🧪 Forzar señal desde API
+            </button>
+
+            <button
+              onClick={() =>
+                openAlert({
+                  at: Date.now(),
+                  verdict: true,
+                  score: 99,
+                  price: price ?? 0,
+                  rsi14: 50,
+                  ema50: 0,
+                  ema200: 0,
+                  change1h: 0,
+                  change24h: 0,
+                  rebound2h: 0,
+                  reason: ["TEST: popup directo (sin API)"],
+                })
+              }
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #334155",
+                background: "#111827",
+                color: "#e5e7eb",
+                cursor: "pointer",
+                fontWeight: 800,
+              }}
+            >
+              🚨 Probar alerta ahora
+            </button>
+          </div>
+        </div>
+
         {/* 🔔 Barra superior */}
         <div
           style={{
@@ -289,13 +393,6 @@ export default function Home() {
               {alertsEnabled ? "ACTIVAS" : "INACTIVAS"}
             </span>
             <span style={{ opacity: 0.7 }}> • Poll señal: 30s</span>
-            <span style={{ opacity: 0.7 }}>
-              {" "}
-              • Modo prueba:{" "}
-              <b style={{ color: forceMode ? "#22c55e" : "#94a3b8" }}>
-                {forceMode ? "ON (?force=1)" : "OFF"}
-              </b>
-            </span>
           </div>
 
           <button
@@ -554,6 +651,25 @@ export default function Home() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* RAW debug (por si quieres ver la respuesta) */}
+      {lastSignalRaw && (
+        <div
+          style={{
+            maxWidth: 780,
+            margin: "12px auto 0",
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid #334155",
+            background: "#0b1220",
+            fontSize: 12,
+            opacity: 0.9,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {JSON.stringify(lastSignalRaw, null, 2)}
         </div>
       )}
     </main>
