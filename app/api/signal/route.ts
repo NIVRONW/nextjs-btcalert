@@ -10,10 +10,22 @@ type CCResp = {
       open: number;
       high: number;
       low: number;
-      volumefrom?: number;
-      volumeto?: number;
     }>;
   };
+};
+
+type SignalPayload = {
+  at: number; // epoch ms
+  verdict: boolean;
+  score: number;
+  price: number;
+  rsi14: number;
+  ema50: number;
+  ema200: number;
+  change1h: number;
+  change24h: number;
+  rebound2h: number;
+  reason: string[];
 };
 
 function ema(values: number[], period: number): number[] {
@@ -70,116 +82,135 @@ function clamp(n: number, a: number, b: number) {
 }
 
 async function fetchCryptoCompareHourly(limit: number) {
-  // Tu app ya usa histohour. Aquí igual:
-  // limit = cantidad de velas - 1 (CryptoCompare devuelve limit+1 puntos)
   const apiKey = process.env.CRYPTOCOMPARE_API_KEY || process.env.CC_API_KEY || "";
 
   const url = new URL("https://min-api.cryptocompare.com/data/v2/histohour");
   url.searchParams.set("fsym", "BTC");
   url.searchParams.set("tsym", "USD");
   url.searchParams.set("limit", String(limit));
-
-  // Si tienes API key, la agregamos (si no, funciona igual pero puede rate-limit)
   if (apiKey) url.searchParams.set("api_key", apiKey);
 
   const res = await fetch(url.toString(), { cache: "no-store" });
-
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
     throw new Error(`CryptoCompare ${res.status}: ${txt.slice(0, 180)}`);
   }
 
   const json = (await res.json()) as CCResp;
-
   if (json.Response && json.Response !== "Success") {
     throw new Error(`CryptoCompare error: ${json.Message || "Unknown"}`);
   }
 
   const rows = json.Data?.Data || [];
   if (!rows.length) throw new Error("CryptoCompare: sin datos");
-
   return rows;
 }
 
-function computeSignalFromHourly(closes: number[]) {
-  // Basado en velas HORARIAS
-  // EMA50/EMA200: necesitan suficiente data, así que pedimos >= 220 velas
+function computeSignal(closes: number[]): SignalPayload {
   const lastPrice = closes[closes.length - 1];
 
-  const ema50 = ema(closes, 50);
-  const ema200 = ema(closes, 200);
-  const rsi14 = rsi(closes, 14);
+  const ema50Arr = ema(closes, 50);
+  const ema200Arr = ema(closes, 200);
+  const rsi14Arr = rsi(closes, 14);
 
-  const e50 = ema50[ema50.length - 1];
-  const e200 = ema200[ema200.length - 1];
-  const rLast = rsi14[rsi14.length - 1];
+  const ema50v = ema50Arr[ema50Arr.length - 1];
+  const ema200v = ema200Arr[ema200Arr.length - 1];
+  const rsi14v = rsi14Arr[rsi14Arr.length - 1];
 
-  // Rebote 2h (en histohour: 2 velas)
+  // Cambio 1h y 24h (horario)
+  const change1h =
+    closes.length >= 2 && closes[closes.length - 2] > 0
+      ? ((lastPrice - closes[closes.length - 2]) / closes[closes.length - 2]) * 100
+      : 0;
+
+  const change24h =
+    closes.length >= 25 && closes[closes.length - 25] > 0
+      ? ((lastPrice - closes[closes.length - 25]) / closes[closes.length - 25]) * 100
+      : 0;
+
+  // Rebote 2h (últimas 2 velas)
   const last2 = closes.slice(-2);
   const min2 = Math.min(...last2);
-  const reboundPct = min2 > 0 ? (lastPrice - min2) / min2 : 0;
+  const rebound2h =
+    min2 > 0 ? ((lastPrice - min2) / min2) * 100 : 0;
 
-  const trendUp = e50 > e200;
-  const rsiOk = Number.isFinite(rLast) ? rLast >= 45 : false;
-  const reboundOk = reboundPct >= 0.005; // 0.5% en 2h (ajustable)
+  // Condiciones base
+  const trendUp = ema50v > ema200v;
 
-  // Score 0-100 (simple y estable)
+  // Scoring (mismo espíritu que ya estabas usando)
   let score = 0;
+
+  // Tendencia
   if (trendUp) score += 45;
 
-  if (Number.isFinite(rLast)) {
+  // RSI
+  if (Number.isFinite(rsi14v)) {
     const rsiScore = (() => {
-      if (rLast < 35) return 0;
-      if (rLast <= 65) return 10 + ((rLast - 35) / 30) * 25; // 10..35
-      return 20 - ((rLast - 65) / 20) * 10; // baja si está muy caliente
+      if (rsi14v < 35) return 0;
+      if (rsi14v <= 65) return 10 + ((rsi14v - 35) / 30) * 25; // 10..35
+      return 20 - ((rsi14v - 65) / 20) * 10; // baja si muy caliente
     })();
     score += clamp(rsiScore, 0, 35);
   }
 
-  const reboundScore = clamp(reboundPct / 0.02, 0, 1) * 20; // 0..2% => 0..20
+  // Rebote 2h
+  const reboundScore = clamp(rebound2h / 2.0, 0, 1) * 20; // 0..2% => 0..20
   score += reboundScore;
 
   score = Math.round(clamp(score, 0, 100));
 
   const reasons: string[] = [];
-  if (trendUp) reasons.push("Tendencia alcista (EMA50 > EMA200)");
-  if (Number.isFinite(rLast)) reasons.push(`RSI ~${Math.round(rLast)}`);
-  if (reboundOk) reasons.push(`Rebote 2h (+${(reboundPct * 100).toFixed(1)}%)`);
+  if (trendUp) reasons.push("EMA50 > EMA200 (alcista)");
+  if (Number.isFinite(rsi14v)) reasons.push(`RSI14 ~${Math.round(rsi14v)}`);
+  if (rebound2h >= 0.5) reasons.push(`Rebote 2h +${rebound2h.toFixed(2)}%`);
 
-  const shouldAlert = score >= 75 && trendUp && (rsiOk || reboundOk);
+  // Tu UI usa verdict + score>=80 (ya lo filtras en page.tsx)
+  const verdict = score >= 75 && trendUp;
 
   return {
-    shouldAlert,
+    at: Date.now(),
+    verdict,
+    score,
     price: lastPrice,
-    reason: reasons.length ? reasons.join(" · ") : "Señal no confirmada",
-    at: new Date().toISOString(),
-    debug: { score, e50, e200, rsi: rLast, reboundPct },
+    rsi14: Number.isFinite(rsi14v) ? rsi14v : 0,
+    ema50: Number.isFinite(ema50v) ? ema50v : 0,
+    ema200: Number.isFinite(ema200v) ? ema200v : 0,
+    change1h,
+    change24h,
+    rebound2h,
+    reason: reasons.length ? reasons : ["Sin confirmación fuerte"],
   };
 }
 
 export async function GET() {
   try {
-    // Para EMA200 en horario, pide mínimo ~220 velas (9+ días).
-    // limit=260 => ~261 puntos (~10-11 días)
+    // Pedimos suficientes velas para EMA200 + 24h atrás
     const rows = await fetchCryptoCompareHourly(260);
-    const closes = rows.map((r) => r.close).filter((n) => Number.isFinite(n) && n > 0);
+    const closes = rows
+      .map((r) => r.close)
+      .filter((n) => Number.isFinite(n) && n > 0);
 
     if (closes.length < 220) {
-      return NextResponse.json(
-        {
-          ok: true,
-          shouldAlert: false,
-          price: closes.at(-1) ?? 0,
-          reason: "Datos insuficientes para EMA200.",
-          at: new Date().toISOString(),
-          debug: { len: closes.length },
-        },
-        { status: 200 }
-      );
+      const payload: SignalPayload = {
+        at: Date.now(),
+        verdict: false,
+        score: 0,
+        price: closes.at(-1) ?? 0,
+        rsi14: 0,
+        ema50: 0,
+        ema200: 0,
+        change1h: 0,
+        change24h: 0,
+        rebound2h: 0,
+        reason: ["Datos insuficientes para EMA200"],
+      };
+      return NextResponse.json({ ok: true, lastSignal: payload }, { status: 200 });
     }
 
-    const signal = computeSignalFromHourly(closes);
-    return NextResponse.json({ ok: true, ...signal }, { status: 200 });
+    const payload = computeSignal(closes);
+
+    // ✅ Esto es lo que tu page.tsx espera:
+    return NextResponse.json({ ok: true, lastSignal: payload }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
       { ok: false, error: e?.message ?? "signal_error" },
