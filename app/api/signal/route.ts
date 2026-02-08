@@ -117,7 +117,7 @@ function computeSignal(closes: number[]): SignalPayload {
   const ema200v = ema200Arr[ema200Arr.length - 1];
   const rsi14v = rsi14Arr[rsi14Arr.length - 1];
 
-  // Cambio 1h y 24h (horario)
+  // % cambio 1h y 24h (histohour)
   const change1h =
     closes.length >= 2 && closes[closes.length - 2] > 0
       ? ((lastPrice - closes[closes.length - 2]) / closes[closes.length - 2]) * 100
@@ -131,19 +131,14 @@ function computeSignal(closes: number[]): SignalPayload {
   // Rebote 2h (últimas 2 velas)
   const last2 = closes.slice(-2);
   const min2 = Math.min(...last2);
-  const rebound2h =
-    min2 > 0 ? ((lastPrice - min2) / min2) * 100 : 0;
+  const rebound2h = min2 > 0 ? ((lastPrice - min2) / min2) * 100 : 0;
 
-  // Condiciones base
   const trendUp = ema50v > ema200v;
 
-  // Scoring (mismo espíritu que ya estabas usando)
+  // Score 0-100
   let score = 0;
-
-  // Tendencia
   if (trendUp) score += 45;
 
-  // RSI
   if (Number.isFinite(rsi14v)) {
     const rsiScore = (() => {
       if (rsi14v < 35) return 0;
@@ -153,7 +148,6 @@ function computeSignal(closes: number[]): SignalPayload {
     score += clamp(rsiScore, 0, 35);
   }
 
-  // Rebote 2h
   const reboundScore = clamp(rebound2h / 2.0, 0, 1) * 20; // 0..2% => 0..20
   score += reboundScore;
 
@@ -164,7 +158,6 @@ function computeSignal(closes: number[]): SignalPayload {
   if (Number.isFinite(rsi14v)) reasons.push(`RSI14 ~${Math.round(rsi14v)}`);
   if (rebound2h >= 0.5) reasons.push(`Rebote 2h +${rebound2h.toFixed(2)}%`);
 
-  // Tu UI usa verdict + score>=80 (ya lo filtras en page.tsx)
   const verdict = score >= 75 && trendUp;
 
   return {
@@ -182,16 +175,18 @@ function computeSignal(closes: number[]): SignalPayload {
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    // Pedimos suficientes velas para EMA200 + 24h atrás
+    const { searchParams } = new URL(req.url);
+    const force = searchParams.get("force") === "1";
+
     const rows = await fetchCryptoCompareHourly(260);
-    const closes = rows
-      .map((r) => r.close)
-      .filter((n) => Number.isFinite(n) && n > 0);
+    const closes = rows.map((r) => r.close).filter((n) => Number.isFinite(n) && n > 0);
+
+    let payload: SignalPayload;
 
     if (closes.length < 220) {
-      const payload: SignalPayload = {
+      payload = {
         at: Date.now(),
         verdict: false,
         score: 0,
@@ -204,12 +199,21 @@ export async function GET() {
         rebound2h: 0,
         reason: ["Datos insuficientes para EMA200"],
       };
-      return NextResponse.json({ ok: true, lastSignal: payload }, { status: 200 });
+    } else {
+      payload = computeSignal(closes);
     }
 
-    const payload = computeSignal(closes);
+    // ✅ FORZAR PRUEBA
+    if (force) {
+      payload = {
+        ...payload,
+        at: Date.now(),
+        verdict: true,
+        score: 99,
+        reason: ["TEST: force=1 (alerta forzada)"],
+      };
+    }
 
-    // ✅ Esto es lo que tu page.tsx espera:
     return NextResponse.json({ ok: true, lastSignal: payload }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json(
