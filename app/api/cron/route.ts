@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 
 function json(data: any, status = 200) {
-  return NextResponse.json(data, { status });
+  return Response.json(data, { status });
 }
 
 function getBearer(req: Request) {
@@ -78,10 +78,9 @@ function pct(a: number, b: number) {
   return ((a - b) / b) * 100;
 }
 
-async function fetchHourlyBTC(hours: number) {
-  // CryptoCompare: histohour?limit=2000 max
-  // hours=240 => 10 días, suficiente para EMA200
-  const limit = Math.min(2000, Math.max(210, hours));
+async function fetchHourlyBTC(limitHours: number) {
+  // CryptoCompare histohour: limit max 2000
+  const limit = Math.min(2000, Math.max(210, limitHours));
   const url = `https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit=${limit}`;
 
   const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
@@ -91,15 +90,17 @@ async function fetchHourlyBTC(hours: number) {
     return { ok: false, status: res.status, data };
   }
 
-  // Data.Data is array of candles
   const arr = data?.Data?.Data || [];
-  const closes = arr.map((c: any) => Number(c.close)).filter((n: any) => Number.isFinite(n));
+  const closes = arr
+    .map((c: any) => Number(c.close))
+    .filter((n: any) => Number.isFinite(n));
+
   return { ok: true, closes, raw: data };
 }
 
 export async function POST(req: Request) {
   try {
-    // ✅ AUTH
+    // ✅ AUTH Bearer
     const expected = (process.env.CRON_SECRET || "").trim();
     const provided = getBearer(req);
 
@@ -107,11 +108,12 @@ export async function POST(req: Request) {
       return json({ ok: false, error: "Unauthorized" }, 401);
     }
 
+    // ✅ force
     const urlObj = new URL(req.url);
     const force = urlObj.searchParams.get("force") === "1";
 
-    // ✅ Fetch REAL data (CryptoCompare)
-    const got = await fetchHourlyBTC(240);
+    // ✅ Data REAL (CryptoCompare)
+    const got = await fetchHourlyBTC(240); // ~10 días
     if (!got.ok) {
       return json(
         { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data },
@@ -140,7 +142,7 @@ export async function POST(req: Request) {
     const change1h = pct(price, price1h);
     const change24h = pct(price, price24h);
 
-    // ✅ Score REAL (0-100)
+    // ✅ Score (0-100) + motivos
     let score = 0;
     const reasons: string[] = [];
 
@@ -202,6 +204,7 @@ export async function POST(req: Request) {
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
+    // ✅ force=1 SIEMPRE manda
     const shouldSend = force || (verdict && score >= VERY_GOOD_SCORE);
 
     let telegram: any = { ok: false, skipped: true };
