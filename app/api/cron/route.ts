@@ -212,20 +212,13 @@ export async function POST(req: Request) {
     if (shouldSend) {
       const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR 🚨";
 
-      const msg =
-        `<b>${escapeHTML(headline)}</b>\n\n` +
-        `<b>Precio actual:</b> $${price.toFixed(2)}\n` +
-        `<b>Score:</b> ${score}\n` +
-        `<b>RSI14:</b> ${rsi14 === null ? "N/A" : rsi14.toFixed(1)}\n` +
-        `<b>EMA50:</b> ${ema50.toFixed(2)}\n` +
-        `<b>EMA200:</b> ${ema200.toFixed(2)}\n` +
-        `<b>Δ 1h:</b> ${change1h.toFixed(2)}%\n` +
-        `<b>Δ 24h:</b> ${change24h.toFixed(2)}%\n` +
-        `<b>Rebote 2h:</b> +${rebound2h.toFixed(2)}%\n\n` +
-        `<b>Motivos:</b>\n` +
-        `${reasons.slice(0, 6).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
-        `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
-        (force ? `\n\n<b>Modo:</b> PRUEBA (force=1)` : "");
+const msg =
+  `<b>${escapeHTML(headline)}</b>\n\n` +
+  `<b>Precio actual:</b> $${price.toFixed(2)}\n\n` +
+  `<b>¿Por qué?</b>\n` +
+  `${reasons.slice(0, 4).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
+  `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
+  (force ? `\n\n<b>Modo:</b> PRUEBA` : "");
 
       telegram = await sendTelegramHTML(msg);
     }
