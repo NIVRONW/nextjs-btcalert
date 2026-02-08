@@ -279,10 +279,12 @@ export default function Home() {
             </div>
 
             {/* SCORE BAR */}
-            <div style={{ marginTop: 16 }}>
-              <div style={{ marginBottom: 6, opacity: 0.95 }}>
-                Score: <b>{signal.score}/100</b>
-              </div>
+            <div style={{ marginBottom: 6 }}>
+  Score:
+  <div style={{ fontSize: 24, fontWeight: 900 }}>
+    {signal.score}/100
+  </div>
+</div>
 
               <div
                 style={{
