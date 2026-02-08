@@ -222,10 +222,18 @@ export default function Home() {
         fontFamily: "system-ui",
       }}
     >
-      <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 26, marginBottom: 18 }}>
-          ₿ BTCALERT – Panel Inteligente
-        </h1>
+      <h1
+  style={{
+    fontSize: 28,
+    marginBottom: 20,
+    fontWeight: 900,
+    background: "linear-gradient(90deg,#22d3ee,#4ade80)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+  }}
+>
+  ₿ BTCALERT – MONITOREO Y ALERTA DE INVERSION
+</h1>
 
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p style={{ color: "#fca5a5" }}>Error cargando señal.</p>}
