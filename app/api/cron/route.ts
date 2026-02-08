@@ -10,22 +10,6 @@ function getBearer(req: Request) {
   return "";
 }
 
-async function sendTelegram(text: string) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return;
-
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    }),
-  });
-}
-
 function ema(values: number[], period: number) {
   const k = 2 / (period + 1);
   let e = values[0];
@@ -63,9 +47,35 @@ function rsi(values: number[], period = 14) {
 }
 
 function pct(a: number, b: number) {
-  // % change from b to a
   if (!b) return 0;
   return ((a - b) / b) * 100;
+}
+
+function escapeHTML(s: string) {
+  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+async function sendTelegramHTML(html: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) {
+    return { ok: false, error: "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID" };
+  }
+
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: html,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
 }
 
 export async function POST(req: Request) {
@@ -77,53 +87,42 @@ export async function POST(req: Request) {
     return json({ ok: false, error: "Unauthorized" }, 401);
   }
 
-  // ✅ Obtener data REAL desde CoinGecko (gratis)
-  // Necesitamos >= 200 puntos horarios para EMA200 => pedimos 10 días (240h aprox)
-  const url =
+  const urlObj = new URL(req.url);
+  const force = urlObj.searchParams.get("force") === "1";
+
+  // ✅ CoinGecko data (hourly, ~10 days)
+  const cgUrl =
     "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=10&interval=hourly";
 
-  const cg = await fetch(url, {
-    headers: { "Accept": "application/json" },
-    // cache off para que sea lo más fresco posible
-    cache: "no-store",
-  });
-
-  if (!cg.ok) {
-    return json({ ok: false, error: "CoinGecko error", status: cg.status }, 500);
-  }
+  const cg = await fetch(cgUrl, { headers: { Accept: "application/json" }, cache: "no-store" });
+  if (!cg.ok) return json({ ok: false, error: "CoinGecko error", status: cg.status }, 500);
 
   const data = await cg.json();
   const prices: [number, number][] = data?.prices || [];
-  if (prices.length < 210) {
+  if (prices.length < 210)
     return json({ ok: false, error: "Not enough price data", points: prices.length }, 500);
-  }
 
-  // Serie de cierres (precios)
   const closes = prices.map((p) => p[1]);
   const price = closes[closes.length - 1];
 
-  // Indicadores
-  const ema50 = ema(closes.slice(-60), 50);         // usamos últimas ~60 horas
-  const ema200 = ema(closes.slice(-220), 200);      // últimas ~220 horas
-  const rsi14 = rsi(closes.slice(-60), 14);         // suficiente para RSI14
+  const ema50 = ema(closes.slice(-60), 50);
+  const ema200 = ema(closes.slice(-220), 200);
+  const rsi14 = rsi(closes.slice(-60), 14);
 
-  // Rebote desde mínimo de 2h (2 puntos atrás + actual)
   const last3 = closes.slice(-3);
   const low2h = Math.min(...last3);
-  const rebound2h = pct(price, low2h); // % rebote desde mínimo 2h
+  const rebound2h = pct(price, low2h);
 
-  // Cambios 1h y 24h aprox
   const price1h = closes.length >= 2 ? closes[closes.length - 2] : price;
   const price24h = closes.length >= 25 ? closes[closes.length - 25] : price;
 
   const change1h = pct(price, price1h);
   const change24h = pct(price, price24h);
 
-  // ✅ SCORING REAL (0 - 100) + razones
+  // ✅ Scoring REAL (0-100)
   let score = 0;
   const reasons: string[] = [];
 
-  // Tendencia fuerte
   if (price >= ema200) {
     score += 30;
     reasons.push("Precio >= EMA200 (tendencia alcista)");
@@ -138,8 +137,7 @@ export async function POST(req: Request) {
     reasons.push("EMA50 < EMA200 (momentum débil)");
   }
 
-  // Pullback sano: cerca de EMA50 (no comprar “arriba”)
-  const distEma50 = Math.abs(pct(price, ema50)); // % de distancia
+  const distEma50 = Math.abs(pct(price, ema50));
   if (distEma50 <= 0.35) {
     score += 20;
     reasons.push("Precio cerca de EMA50 (pullback sano)");
@@ -147,10 +145,9 @@ export async function POST(req: Request) {
     score += 10;
     reasons.push("Precio moderadamente cerca de EMA50");
   } else {
-    reasons.push("Precio lejos de EMA50 (posible entrada mala)");
+    reasons.push("Precio lejos de EMA50 (entrada menos favorable)");
   }
 
-  // RSI zona buena (ni sobrecomprado ni muy débil)
   if (rsi14 !== null) {
     if (rsi14 >= 42 && rsi14 <= 62) {
       score += 15;
@@ -164,9 +161,10 @@ export async function POST(req: Request) {
     } else {
       reasons.push(`RSI14 extremo (${rsi14.toFixed(1)})`);
     }
+  } else {
+    reasons.push("RSI14 no disponible");
   }
 
-  // Rebote desde mínimo 2h (señal de reacción)
   if (rebound2h >= 0.30) {
     score += 10;
     reasons.push(`Rebote >= 0.3% desde mínimo 2h (+${rebound2h.toFixed(2)}%)`);
@@ -174,33 +172,40 @@ export async function POST(req: Request) {
     reasons.push(`Rebote 2h bajo (+${rebound2h.toFixed(2)}%)`);
   }
 
-  // ✅ Verdict “muy buena oportunidad”
-  // (estricto, como pediste)
+  // ✅ “Más activo”: umbral más bajo
   const VERY_GOOD_SCORE = 75;
 
+  // Verdict (condición extra de “calidad”)
   const verdict =
     score >= VERY_GOOD_SCORE &&
     price >= ema200 &&
     ema50 >= ema200 &&
-    (rsi14 === null || (rsi14 >= 38 && rsi14 <= 68));
+    (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-  const shouldSend = verdict && score >= VERY_GOOD_SCORE;
+  // Telegram:
+  // - force=1 => prueba
+  // - sin force => solo si verdict=true y score>=umbral
+  const shouldSend = force || (verdict && score >= VERY_GOOD_SCORE);
 
-  // ✅ Telegram: solo cuando sea MUY buena oportunidad
   if (shouldSend) {
-    const msg =
-      `🚨 MUY BUENA OPORTUNIDAD BTC\n\n` +
-      `Precio: $${price.toFixed(2)}\n` +
-      `Score: ${score}\n` +
-      `RSI14: ${rsi14 === null ? "N/A" : rsi14.toFixed(1)}\n` +
-      `EMA50: ${ema50.toFixed(2)}\n` +
-      `EMA200: ${ema200.toFixed(2)}\n` +
-      `Δ1h: ${change1h.toFixed(2)}%\n` +
-      `Δ24h: ${change24h.toFixed(2)}%\n\n` +
-      `Motivos:\n- ${reasons.slice(0, 6).join("\n- ")}\n\n` +
-      `Hora: ${new Date().toLocaleString()}`;
+    const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR 🚨";
 
-    await sendTelegram(msg);
+    const msg =
+      `<b>${escapeHTML(headline)}</b>\n\n` +
+      `<b>Precio actual:</b> $${price.toFixed(2)}\n` +
+      `<b>Score:</b> ${score}\n` +
+      `<b>RSI14:</b> ${rsi14 === null ? "N/A" : rsi14.toFixed(1)}\n` +
+      `<b>EMA50:</b> ${ema50.toFixed(2)}\n` +
+      `<b>EMA200:</b> ${ema200.toFixed(2)}\n` +
+      `<b>Δ 1h:</b> ${change1h.toFixed(2)}%\n` +
+      `<b>Δ 24h:</b> ${change24h.toFixed(2)}%\n` +
+      `<b>Rebote 2h:</b> +${rebound2h.toFixed(2)}%\n\n` +
+      `<b>Motivos:</b>\n` +
+      `${reasons.slice(0, 6).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
+      `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
+      (force ? `\n\n<b>Modo:</b> PRUEBA (force=1)` : "");
+
+    await sendTelegramHTML(msg);
   }
 
   return json({
@@ -217,6 +222,7 @@ export async function POST(req: Request) {
     change24h,
     rebound2h,
     reason: reasons,
+    force,
   });
 }
 
