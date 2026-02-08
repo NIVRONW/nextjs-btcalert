@@ -14,9 +14,12 @@ type CCResp = {
   };
 };
 
+type Action = "BUY" | "SELL" | "NONE";
+
 type SignalPayload = {
   at: number; // epoch ms
   verdict: boolean;
+  action: Action; // ✅ NUEVO
   score: number;
   price: number;
   rsi14: number;
@@ -158,11 +161,21 @@ function computeSignal(closes: number[]): SignalPayload {
   if (Number.isFinite(rsi14v)) reasons.push(`RSI14 ~${Math.round(rsi14v)}`);
   if (rebound2h >= 0.5) reasons.push(`Rebote 2h +${rebound2h.toFixed(2)}%`);
 
-  const verdict = score >= 75 && trendUp;
+  // ✅ BUY/SELL coherente (simple y seguro)
+  const buyVerdict = score >= 75 && trendUp;
+  const sellVerdict = score >= 75 && !trendUp && (Number.isFinite(rsi14v) ? rsi14v >= 55 : true);
+
+  const action: Action = buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
+  const verdict = action !== "NONE";
+
+  // ✅ Añadir razón de acción (para que page.tsx pueda mostrarlo claro)
+  if (action === "BUY") reasons.unshift("🟢 COMPRA");
+  if (action === "SELL") reasons.unshift("🔴 VENTA");
 
   return {
     at: Date.now(),
     verdict,
+    action,
     score,
     price: lastPrice,
     rsi14: Number.isFinite(rsi14v) ? rsi14v : 0,
@@ -178,7 +191,11 @@ function computeSignal(closes: number[]): SignalPayload {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+
     const force = searchParams.get("force") === "1";
+    const forcedActionRaw = (searchParams.get("action") || "").toUpperCase();
+    const forcedAction: Action =
+      forcedActionRaw === "BUY" ? "BUY" : forcedActionRaw === "SELL" ? "SELL" : "NONE";
 
     const rows = await fetchCryptoCompareHourly(260);
     const closes = rows.map((r) => r.close).filter((n) => Number.isFinite(n) && n > 0);
@@ -189,6 +206,7 @@ export async function GET(req: Request) {
       payload = {
         at: Date.now(),
         verdict: false,
+        action: "NONE",
         score: 0,
         price: closes.at(-1) ?? 0,
         rsi14: 0,
@@ -203,22 +221,24 @@ export async function GET(req: Request) {
       payload = computeSignal(closes);
     }
 
-    // ✅ FORZAR PRUEBA
+    // ✅ FORZAR PRUEBA (opcional con action)
     if (force) {
+      const actionToUse: Action = forcedAction !== "NONE" ? forcedAction : "BUY";
       payload = {
         ...payload,
         at: Date.now(),
         verdict: true,
+        action: actionToUse,
         score: 99,
-        reason: ["TEST: force=1 (alerta forzada)"],
+        reason:
+          actionToUse === "SELL"
+            ? ["🔴 VENTA", "TEST: force=1 (alerta forzada)"]
+            : ["🟢 COMPRA", "TEST: force=1 (alerta forzada)"],
       };
     }
 
     return NextResponse.json({ ok: true, lastSignal: payload }, { status: 200 });
   } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "signal_error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ ok: false, error: e?.message ?? "signal_error" }, { status: 500 });
   }
 }
