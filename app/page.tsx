@@ -79,6 +79,18 @@ export default function Home() {
   // AudioContext se crea solo con gesto del usuario
   const audioCtxRef = useRef<AudioContext | null>(null);
 
+  // ✅ MODO PRUEBA: si abres la app con ?force=1, el polling usará /api/signal?force=1
+  const [forceMode, setForceMode] = useState(false);
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setForceMode(sp.get("force") === "1");
+    } catch {
+      setForceMode(false);
+    }
+  }, []);
+
   function playBeep() {
     try {
       const AudioContextImpl =
@@ -88,9 +100,8 @@ export default function Home() {
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContextImpl();
 
       const ctx = audioCtxRef.current;
-      if (!ctx) return; // ✅ FIX: evita "ctx is possibly null"
+      if (!ctx) return;
 
-      // Si está suspendido, intentar reanudar (puede requerir gesto)
       if (ctx.state === "suspended") {
         ctx.resume().catch(() => {});
       }
@@ -111,7 +122,7 @@ export default function Home() {
       o.start();
       o.stop(ctx.currentTime + 0.2);
     } catch {
-      // sin ruido si falla
+      // silencioso
     }
   }
 
@@ -166,7 +177,10 @@ export default function Home() {
   // Lee la señal de /api/signal y dispara popup + sonido + vibración
   async function pollSignal() {
     try {
-      const s = await fetchJSON("/api/signal");
+      // ✅ aquí está el cambio clave
+      const url = forceMode ? "/api/signal?force=1" : "/api/signal";
+
+      const s = await fetchJSON(url);
       const sig: SignalPayload | null = s?.lastSignal ?? null;
       if (!sig || !sig.at) return;
 
@@ -195,7 +209,6 @@ export default function Home() {
         vibrate([120, 80, 120, 80, 180]);
         playBeep();
 
-        // Notificación del navegador (opcional)
         if ("Notification" in window) {
           if (Notification.permission === "granted") {
             new Notification("BTC: Zona de entrada", {
@@ -219,7 +232,7 @@ export default function Home() {
     pollSignal();
     const id = setInterval(pollSignal, 30_000);
     return () => clearInterval(id);
-  }, [alertsEnabled]);
+  }, [alertsEnabled, forceMode]);
 
   const path = useMemo(() => (series.length ? makePath(series) : ""), [series]);
   const changeColor = (chg24 ?? 0) >= 0 ? "#22c55e" : "#ef4444";
@@ -276,6 +289,13 @@ export default function Home() {
               {alertsEnabled ? "ACTIVAS" : "INACTIVAS"}
             </span>
             <span style={{ opacity: 0.7 }}> • Poll señal: 30s</span>
+            <span style={{ opacity: 0.7 }}>
+              {" "}
+              • Modo prueba:{" "}
+              <b style={{ color: forceMode ? "#22c55e" : "#94a3b8" }}>
+                {forceMode ? "ON (?force=1)" : "OFF"}
+              </b>
+            </span>
           </div>
 
           <button
