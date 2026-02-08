@@ -1,10 +1,9 @@
-import { NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({
+  return Response.json({
     ok: true,
     marker: "BTC-CRON-DEPLOY-VERIFY-V1",
     time: new Date().toISOString(),
   });
 }
-
