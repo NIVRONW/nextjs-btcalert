@@ -225,23 +225,19 @@ telegram = await sendTelegramHTML(msg);
     }
 
     return json({
-      ok: true,
-      at: Date.now(),
-      price,
-      score,
-      verdict,
-      alert: shouldSend,
-      force,
-      rsi14,
-      ema50,
-      ema200,
-      change1h,
-      change24h,
-      rebound2h,
-      reason: reasons,
-      telegram,
-      source: "CryptoCompare",
-    });
+  ok: true,
+  at: Date.now(),
+  price,
+  alert: shouldSend,
+  force,
+  reason: reasons.slice(0, 3),
+  telegram: {
+    ok: telegram?.ok ?? false,
+    status: telegram?.status ?? null,
+  },
+  source: "CryptoCompare",
+});
+
   } catch (err: any) {
     return json({ ok: false, error: err?.message ?? String(err) }, 500);
   }
