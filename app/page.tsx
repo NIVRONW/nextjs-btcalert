@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Status = "loading" | "ok" | "error";
 type Action = "BUY" | "SELL" | "NONE";
@@ -16,13 +16,7 @@ type SignalPayload = {
   ema200: number;
 };
 
-type Candle = {
-  t: number; // epoch ms
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-};
+type Candle = { t: number; o: number; h: number; l: number; c: number };
 
 function formatUSD(n: number) {
   return new Intl.NumberFormat("en-US", {
@@ -36,256 +30,280 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+function headlineFromAction(action: Action) {
+  if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
+  if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
+  return "🟡 Sin señal clara";
+}
+
 async function fetchJSON(url: string) {
   const res = await fetch(url, { cache: "no-store" });
   const text = await res.text().catch(() => "");
-  if (!res.ok) throw new Error(text || `${res.status}`);
+  if (!res.ok) throw new Error(`${res.status} ${text}`);
   return JSON.parse(text);
 }
 
-const BUY_MIN_SCORE = 85;
-
-function applyExtraConfirmation(signal: SignalPayload): Action {
-  const baseIsSignal = signal.verdict && signal.action !== "NONE";
-  if (!baseIsSignal) return "NONE";
-
-  if (signal.action === "SELL") return "SELL";
-
-  if (signal.action === "BUY" && signal.score >= BUY_MIN_SCORE) return "BUY";
-
-  return "NONE";
-}
-
-function getBanner(safeAction: Action, score: number) {
-  if (safeAction === "NONE") {
-    return {
-      text: "🟡 Sin señal clara",
-      color: "#fbbf24",
-      sub:
-        score > 0 && score < BUY_MIN_SCORE
-          ? `Compra bloqueada: Score mínimo ${BUY_MIN_SCORE}.`
-          : "El mercado no muestra una oportunidad sólida ahora mismo.",
-    };
-  }
-
-  if (safeAction === "SELL") {
-    return { text: "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴", color: "#f87171", sub: "" };
-  }
-
-  return { text: "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢", color: "#4ade80", sub: "" };
-}
-
-/** Render sencillo de velas en SVG */
-function CandleChart({ candles }: { candles: Candle[] }) {
-  const width = 720;
-  const height = 260;
-  const pad = 28;
-
-  if (!candles || candles.length < 5) {
-    return (
-      <div
-        style={{
-          marginTop: 16,
-          padding: 14,
-          borderRadius: 14,
-          border: "1px solid rgba(148,163,184,0.18)",
-          background: "rgba(11,18,32,0.55)",
-          fontSize: 12,
-          opacity: 0.9,
-        }}
-      >
-        No llegaron velas todavía (candles vacío). Si esto persiste, el endpoint
-        /api/candles no está devolviendo datos.
-      </div>
-    );
-  }
-
-  const highs = candles.map((c) => c.h);
-  const lows = candles.map((c) => c.l);
-
-  const max = Math.max(...highs);
-  const min = Math.min(...lows);
-
-  const span = Math.max(1e-9, max - min);
-
-  const scaleY = (v: number) => pad + ((max - v) / span) * (height - pad * 2);
-
-  const n = candles.length;
-  const candleW = (width - pad * 2) / n;
-
-  return (
-    <div style={{ marginTop: 18 }}>
-      <div style={{ fontWeight: 800, marginBottom: 10, fontSize: 13, opacity: 0.95 }}>
-        📊 Velas últimas {n}h
-      </div>
-
-      <div
-        style={{
-          borderRadius: 16,
-          border: "1px solid rgba(148,163,184,0.16)",
-          background: "rgba(11,18,32,0.55)",
-          padding: 10,
-          overflow: "hidden",
-        }}
-      >
-        <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-          {candles.map((c, i) => {
-            const xCenter = pad + i * candleW + candleW / 2;
-
-            const openY = scaleY(c.o);
-            const closeY = scaleY(c.c);
-            const highY = scaleY(c.h);
-            const lowY = scaleY(c.l);
-
-            const isUp = c.c >= c.o;
-            const color = isUp ? "#22c55e" : "#ef4444";
-
-            const bodyTop = Math.min(openY, closeY);
-            const bodyH = Math.max(2, Math.abs(openY - closeY));
-            const bodyW = Math.max(2, candleW / 1.6);
-
-            return (
-              <g key={i}>
-                {/* mecha */}
-                <line x1={xCenter} x2={xCenter} y1={highY} y2={lowY} stroke={color} strokeWidth={1} />
-                {/* cuerpo */}
-                <rect
-                  x={xCenter - bodyW / 2}
-                  y={bodyTop}
-                  width={bodyW}
-                  height={bodyH}
-                  fill={color}
-                  rx={1.5}
-                />
-              </g>
-            );
-          })}
-        </svg>
-
-        <div style={{ marginTop: 8, fontSize: 11, opacity: 0.75 }}>
-          Rango: {formatUSD(min)} – {formatUSD(max)}
-        </div>
-      </div>
-    </div>
-  );
+function pickBg(action: Action) {
+  if (action === "BUY") return "radial-gradient(1200px 500px at 10% 0%, rgba(34,197,94,.22), rgba(11,15,25,1))";
+  if (action === "SELL") return "radial-gradient(1200px 500px at 10% 0%, rgba(239,68,68,.20), rgba(11,15,25,1))";
+  return "radial-gradient(1200px 500px at 10% 0%, rgba(250,204,21,.16), rgba(11,15,25,1))";
 }
 
 export default function Home() {
   const [signal, setSignal] = useState<SignalPayload | null>(null);
-  const [candles, setCandles] = useState<Candle[]>([]);
   const [status, setStatus] = useState<Status>("loading");
-  const [errMsg, setErrMsg] = useState<string>("");
+  const [updatedAt, setUpdatedAt] = useState<string>("");
 
-  async function loadData() {
+  // Velas
+  const [candles, setCandles] = useState<Candle[]>([]);
+  const [candlesStatus, setCandlesStatus] = useState<Status>("loading");
+  const [candlesErr, setCandlesErr] = useState<string>("");
+
+  async function loadAll() {
     try {
       setStatus("loading");
-      setErrMsg("");
 
-      const [s, c] = await Promise.all([
-        fetchJSON("/api/signal"),
-        fetchJSON("/api/candles?limit=72"),
-      ]);
+      const s = await fetchJSON("/api/signal");
+      const sig = (s?.lastSignal ?? null) as SignalPayload | null;
+      setSignal(sig);
 
-      setSignal(s?.lastSignal ?? null);
-      setCandles(Array.isArray(c?.candles) ? c.candles : []);
-
+      setUpdatedAt(new Date().toLocaleString());
       setStatus("ok");
-    } catch (e: any) {
+    } catch {
       setStatus("error");
-      setErrMsg(String(e?.message ?? e));
+    }
+  }
+
+  async function loadCandles() {
+    try {
+      setCandlesStatus("loading");
+      setCandlesErr("");
+
+      const c = await fetchJSON("/api/candles?limit=72");
+      const arr = (c?.candles ?? []) as Candle[];
+
+      if (!Array.isArray(arr) || arr.length < 10) {
+        throw new Error("No llegaron velas suficientes desde /api/candles");
+      }
+
+      setCandles(
+        arr
+          .map((x) => ({
+            t: Number(x.t),
+            o: Number(x.o),
+            h: Number(x.h),
+            l: Number(x.l),
+            c: Number(x.c),
+          }))
+          .filter(
+            (x) =>
+              Number.isFinite(x.t) &&
+              Number.isFinite(x.o) &&
+              Number.isFinite(x.h) &&
+              Number.isFinite(x.l) &&
+              Number.isFinite(x.c)
+          )
+      );
+
+      setCandlesStatus("ok");
+    } catch (e: any) {
+      setCandlesStatus("error");
+      setCandlesErr(String(e?.message ?? e));
     }
   }
 
   useEffect(() => {
-    loadData();
-    const id = setInterval(loadData, 60_000);
+    loadAll();
+    loadCandles();
+
+    const id = setInterval(() => {
+      loadAll();
+      loadCandles();
+    }, 60_000);
+
     return () => clearInterval(id);
   }, []);
 
-  const safeAction = signal ? applyExtraConfirmation(signal) : "NONE";
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
-  const banner = signal ? getBanner(safeAction, signal.score) : null;
+
+  // ====== Gráfico de velas (SVG) ======
+  const candleSVG = useMemo(() => {
+    if (!candles.length) return null;
+
+    const W = 900;
+    const H = 260;
+    const padX = 10;
+    const padY = 12;
+
+    const highs = candles.map((c) => c.h);
+    const lows = candles.map((c) => c.l);
+
+    const minY = Math.min(...lows);
+    const maxY = Math.max(...highs);
+    const range = Math.max(1e-9, maxY - minY);
+
+    const scaleY = (v: number) =>
+      H - padY - ((v - minY) / range) * (H - padY * 2);
+
+    const n = candles.length;
+    const step = (W - padX * 2) / Math.max(1, n);
+    const bodyW = Math.max(3, Math.min(10, step * 0.6));
+
+    return (
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+        {/* grid sutil */}
+        {Array.from({ length: 5 }).map((_, i) => {
+          const y = padY + ((H - padY * 2) * i) / 4;
+          return (
+            <line
+              key={i}
+              x1={padX}
+              x2={W - padX}
+              y1={y}
+              y2={y}
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth="1"
+            />
+          );
+        })}
+
+        {candles.map((c, i) => {
+          const xCenter = padX + step * i + step / 2;
+
+          const yH = scaleY(c.h);
+          const yL = scaleY(c.l);
+          const yO = scaleY(c.o);
+          const yC = scaleY(c.c);
+
+          const up = c.c >= c.o;
+
+          const top = Math.min(yO, yC);
+          const bot = Math.max(yO, yC);
+          const bodyH = Math.max(2, bot - top);
+
+          const wickColor = "rgba(255,255,255,0.45)";
+          const bodyColor = up ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)";
+
+          return (
+            <g key={c.t}>
+              {/* wick */}
+              <line
+                x1={xCenter}
+                x2={xCenter}
+                y1={yH}
+                y2={yL}
+                stroke={wickColor}
+                strokeWidth="1"
+              />
+
+              {/* body */}
+              <rect
+                x={xCenter - bodyW / 2}
+                y={top}
+                width={bodyW}
+                height={bodyH}
+                fill={bodyColor}
+                rx="2"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }, [candles]);
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        padding: 20,
-        background: "#0b0f19",
+        padding: 18,
+        background: signal ? pickBg(signal.action) : "#0b0f19",
         color: "#e5e7eb",
         fontFamily: "system-ui",
       }}
     >
-      <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 26, marginBottom: 20 }}>₿ BTCALERT – TE ALERTA EN QUE MOMENTO INVERTIR</h1>
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        <h1 style={{ fontSize: 26, marginBottom: 18 }}>
+          ₿ BTCALERT – Panel Inteligente
+        </h1>
 
         {status === "loading" && <p>Cargando datos...</p>}
+        {status === "error" && <p style={{ color: "#fca5a5" }}>Error cargando señal.</p>}
 
-        {status === "error" && (
+        {signal && (
           <div
             style={{
-              padding: 14,
-              borderRadius: 14,
-              border: "1px solid rgba(248,113,113,0.35)",
-              background: "rgba(127,29,29,0.15)",
-              color: "#fecaca",
-              fontSize: 13,
-            }}
-          >
-            Error cargando datos: {errMsg || "desconocido"}
-          </div>
-        )}
-
-        {signal && banner && (
-          <div
-            style={{
-              borderRadius: 22,
+              borderRadius: 18,
               padding: 22,
-              background:
-                "radial-gradient(1200px 500px at 20% 0%, rgba(96,165,250,0.18), rgba(15,23,42,1) 60%)",
-              border: "1px solid rgba(148,163,184,0.18)",
+              background: "rgba(15,23,42,0.75)",
+              border: "1px solid rgba(255,255,255,0.08)",
               boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+              backdropFilter: "blur(10px)",
             }}
           >
-            {/* BANNER */}
-            <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 6, color: banner.color }}>
-              {banner.text}
-            </div>
-            <div style={{ opacity: 0.75, fontSize: 12, marginBottom: 18 }}>{banner.sub}</div>
+            {/* TITULO */}
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  fontWeight: 900,
+                  fontSize: 18,
+                  marginBottom: 10,
+                  color:
+                    signal.action === "SELL"
+                      ? "#f87171"
+                      : signal.action === "BUY"
+                      ? "#4ade80"
+                      : "#facc15",
+                }}
+              >
+                {headlineFromAction(signal.action)}
+              </div>
 
-            {/* PRECIO */}
-            <div style={{ fontSize: 52, fontWeight: 900, letterSpacing: -0.5 }}>
+              <div style={{ opacity: 0.75, fontSize: 12 }}>
+                Última actualización
+                <div style={{ fontWeight: 800, opacity: 0.95 }}>{updatedAt}</div>
+              </div>
+            </div>
+
+            {/* PRECIO GRANDE */}
+            <div style={{ fontSize: 48, fontWeight: 950, letterSpacing: -0.8 }}>
               {formatUSD(signal.price)}
             </div>
 
-            {/* SCORE */}
-            <div style={{ marginTop: 18 }}>
-              <div style={{ marginBottom: 6 }}>
+            {/* SCORE BAR */}
+            <div style={{ marginTop: 16 }}>
+              <div style={{ marginBottom: 6, opacity: 0.95 }}>
                 Score: <b>{signal.score}/100</b>
               </div>
+
               <div
                 style={{
-                  height: 10,
+                  height: 12,
                   borderRadius: 999,
-                  background: "rgba(17,24,39,0.85)",
+                  background: "rgba(255,255,255,0.06)",
                   overflow: "hidden",
-                  border: "1px solid rgba(148,163,184,0.12)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
                 <div
                   style={{
                     height: "100%",
                     width: `${scoreBar}%`,
-                    background: scoreBar >= 75 ? "#22c55e" : scoreBar >= 50 ? "#fbbf24" : "#ef4444",
+                    background:
+                      scoreBar >= 75
+                        ? "#22c55e"
+                        : scoreBar >= 50
+                        ? "#fbbf24"
+                        : "#ef4444",
                   }}
                 />
               </div>
             </div>
 
-            {/* INDICADORES */}
+            {/* INDICADORES LIMPIOS */}
             <div
               style={{
-                marginTop: 22,
+                marginTop: 18,
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
                 gap: 16,
@@ -293,29 +311,55 @@ export default function Home() {
             >
               <div>
                 <div style={{ opacity: 0.7 }}>RSI (14)</div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>{signal.rsi14.toFixed(2)}</div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                  {signal.rsi14.toFixed(2)}
+                </div>
               </div>
 
               <div>
                 <div style={{ opacity: 0.7 }}>EMA 50</div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>{formatUSD(signal.ema50)}</div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                  {formatUSD(signal.ema50)}
+                </div>
               </div>
 
               <div>
                 <div style={{ opacity: 0.7 }}>EMA 200</div>
-                <div style={{ fontWeight: 800, fontSize: 18 }}>{formatUSD(signal.ema200)}</div>
-              </div>
-
-              <div>
-                <div style={{ opacity: 0.7 }}>Última actualización</div>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>
-                  {new Date(signal.at).toLocaleString()}
+                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                  {formatUSD(signal.ema200)}
                 </div>
               </div>
             </div>
 
-            {/* ✅ VELAS (DENTRO del panel, para que SIEMPRE se vea) */}
-            <CandleChart candles={candles} />
+            {/* ====== VELAS ====== */}
+            <div style={{ marginTop: 22 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.9, marginBottom: 10 }}>
+                Gráfico de velas (últimas 72 horas)
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(11,18,32,0.6)",
+                  padding: 12,
+                }}
+              >
+                {candlesStatus === "loading" && (
+                  <div style={{ opacity: 0.75 }}>Cargando velas…</div>
+                )}
+
+                {candlesStatus === "error" && (
+                  <div style={{ color: "#fca5a5", fontSize: 12, whiteSpace: "pre-wrap" }}>
+                    No se pudieron cargar las velas desde <b>/api/candles</b>.
+                    {"\n"}
+                    Detalle: {candlesErr || "Sin detalle"}
+                  </div>
+                )}
+
+                {candlesStatus === "ok" && candleSVG}
+              </div>
+            </div>
           </div>
         )}
       </div>
