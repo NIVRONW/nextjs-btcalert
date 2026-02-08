@@ -292,13 +292,19 @@ export default function Home() {
         fontFamily: "system-ui",
       }}
     >
-      <div style={{ maxWidth: 980, margin: "0 auto" }}>
-        {/* TITULO */}
-        <h1 style={{ fontSize: 28, marginBottom: 20, fontWeight: 900, letterSpacing: 0.2 }}>
-          <span style={{ color: "#fbbf24" }}>₿ BTCALERT</span>{" "}
-          <span style={{ opacity: 0.92 }}>– MONITOREO Y ALERTA DE INVERSION</span>
-        </h1>
-
+      <h1
+  style={{
+    fontSize: 26,
+    fontWeight: 700,
+    marginBottom: 20,
+  }}
+>
+  <span style={{ color: "#facc15" }}>₿ BTCALERT</span>{" "}
+  <span style={{ color: "#eab308" }}>
+    – MONITOREO Y ALERTA DE INVERSION
+  </span>
+</h1>
+      
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p>Error cargando señal.</p>}
 
