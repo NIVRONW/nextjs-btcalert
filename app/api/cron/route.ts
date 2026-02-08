@@ -205,22 +205,36 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
-    // ✅ Mas activo (oportunidad real)
+    // ✅ Umbral
     const VERY_GOOD_SCORE = 75;
 
-    const verdict =
+    // ✅ Señal COMPRA (tu lógica original)
+    const buyVerdict =
       score >= VERY_GOOD_SCORE &&
       price >= ema200 &&
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-    // ✅ Enviar si force=1 o si oportunidad real
-    const shouldSend = force || verdict;
+    // ✅ Señal VENTA (simple y coherente con lo que ya calculas)
+    // (sin complicarte indicadores nuevos)
+    const sellVerdict =
+      score >= VERY_GOOD_SCORE &&
+      price < ema200 &&
+      ema50 < ema200 &&
+      (rsi14 === null || rsi14 >= 55); // en bajista, rsi no muy bajo
+
+    const action: "BUY" | "SELL" | "NONE" = buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
+
+    // ✅ Enviar si force=1 o si hay oportunidad real (compra o venta)
+    const shouldSend = force || action !== "NONE";
 
     let telegram: any = { ok: false, skipped: true };
 
     if (shouldSend) {
-      const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR 🚨";
+      const headline =
+        action === "SELL"
+          ? "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴"
+          : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
 
       const ahora = new Date();
       const hora = ahora.toLocaleTimeString("en-US");
@@ -242,11 +256,11 @@ export async function POST(req: Request) {
       telegram = await sendTelegramHTML(msg);
     }
 
-    // ✅ Respuesta limpia (PowerShell no muestra indicadores)
     return json({
       ok: true,
       at: Date.now(),
       price,
+      action,
       alert: shouldSend,
       force,
       reason: reasons.slice(0, 3),
