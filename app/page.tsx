@@ -35,16 +35,63 @@ async function fetchJSON(url: string) {
   return JSON.parse(text);
 }
 
-function getBanner(signal: SignalPayload) {
-  if (!signal.verdict || signal.action === "NONE") {
+/**
+ * ✅ Confirmación extra para BUY (menos riesgo):
+ * - BUY solo se muestra si score >= BUY_MIN_SCORE
+ * - SELL no se bloquea (defensivo)
+ */
+const BUY_MIN_SCORE = 85;
+
+function applyExtraConfirmation(signal: SignalPayload) {
+  const baseIsSignal = signal.verdict && signal.action !== "NONE";
+
+  // Si no hay señal base, queda NONE
+  if (!baseIsSignal) {
     return {
-      text: "🟡 Sin señal clara",
-      color: "#fbbf24",
-      sub: "El mercado no muestra una oportunidad sólida ahora mismo.",
+      safeAction: "NONE" as Action,
+      blockedReason: "",
     };
   }
 
+  // SELL no se bloquea
   if (signal.action === "SELL") {
+    return {
+      safeAction: "SELL" as Action,
+      blockedReason: "",
+    };
+  }
+
+  // BUY: requiere score alto
+  if (signal.action === "BUY" && signal.score >= BUY_MIN_SCORE) {
+    return {
+      safeAction: "BUY" as Action,
+      blockedReason: "",
+    };
+  }
+
+  // BUY bloqueada
+  return {
+    safeAction: "NONE" as Action,
+    blockedReason: `Compra bloqueada: Score mínimo ${BUY_MIN_SCORE} (actual ${signal.score}).`,
+  };
+}
+
+function getBanner(
+  signal: SignalPayload,
+  safeAction: Action,
+  blockedReason: string
+) {
+  if (safeAction === "NONE") {
+    return {
+      text: "🟡 Sin señal clara",
+      color: "#fbbf24",
+      sub: blockedReason
+        ? blockedReason
+        : "El mercado no muestra una oportunidad sólida ahora mismo.",
+    };
+  }
+
+  if (safeAction === "SELL") {
     return {
       text: "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴",
       color: "#f87171",
@@ -52,18 +99,16 @@ function getBanner(signal: SignalPayload) {
     };
   }
 
+  // BUY
   return {
     text: "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢",
     color: "#4ade80",
-    sub: "Se detectaron condiciones de entrada.",
+    sub: `Confirmación extra OK (Score ≥ ${BUY_MIN_SCORE}).`,
   };
 }
 
-function getPanelStyle(signal: SignalPayload) {
-  // Neutro si no hay señal clara
-  const isNeutral = !signal.verdict || signal.action === "NONE";
-
-  if (isNeutral) {
+function getPanelStyle(safeAction: Action) {
+  if (safeAction === "NONE") {
     return {
       background:
         "radial-gradient(1200px 500px at 20% 0%, rgba(96,165,250,0.18), rgba(15,23,42,1) 60%)",
@@ -71,7 +116,7 @@ function getPanelStyle(signal: SignalPayload) {
     };
   }
 
-  if (signal.action === "SELL") {
+  if (safeAction === "SELL") {
     return {
       background:
         "radial-gradient(1200px 500px at 20% 0%, rgba(248,113,113,0.20), rgba(15,23,42,1) 60%)",
@@ -109,8 +154,13 @@ export default function Home() {
   }, []);
 
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
-  const banner = signal ? getBanner(signal) : null;
-  const panelStyle = signal ? getPanelStyle(signal) : null;
+
+  const confirm = signal ? applyExtraConfirmation(signal) : null;
+  const safeAction = confirm?.safeAction ?? "NONE";
+  const blockedReason = confirm?.blockedReason ?? "";
+
+  const banner = signal ? getBanner(signal, safeAction, blockedReason) : null;
+  const panelStyle = getPanelStyle(safeAction);
 
   return (
     <main
@@ -130,7 +180,7 @@ export default function Home() {
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p>Error cargando señal.</p>}
 
-        {signal && banner && panelStyle && (
+        {signal && banner && (
           <div
             style={{
               borderRadius: 18,
