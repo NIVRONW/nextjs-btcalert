@@ -219,7 +219,7 @@ const msg =
   `${reasons.slice(0, 3).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
   `<b>Fecha y hora:</b> ${escapeHTML(new Date().toLocaleString())}`;
 
-telegram = await sendTelegramHTML(msg);
+await sendTelegram(mensaje);
     }
 
     return json({
