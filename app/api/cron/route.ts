@@ -176,7 +176,7 @@ export async function POST(req: Request) {
 
   // ✅ Verdict “muy buena oportunidad”
   // (estricto, como pediste)
-  const VERY_GOOD_SCORE = 85;
+  const VERY_GOOD_SCORE = 75;
 
   const verdict =
     score >= VERY_GOOD_SCORE &&
