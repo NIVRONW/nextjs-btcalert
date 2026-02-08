@@ -77,7 +77,6 @@ function hasMeaningfulMove(newPrice: number, lastPrice: number | null) {
   const diff = Math.abs(newPrice - lastPrice);
   const pct = lastPrice > 0 ? (diff / lastPrice) * 100 : 0;
 
-  // Ajusta aquí si quieres más/menos sensibilidad
   const MIN_PCT = 0.25; // 0.25%
   const MIN_USD = 80; // $80
 
@@ -86,7 +85,6 @@ function hasMeaningfulMove(newPrice: number, lastPrice: number | null) {
 
 /** ✅ Firma anti-spam para evitar repetir por "at" cambiante */
 function makeSignature(sig: SignalPayload) {
-  // “bucket” del precio para no disparar por centavos
   const bucket = Math.round((sig.price || 0) / 10) * 10; // cada $10
   return `${sig.action}|${bucket}|${Math.round(sig.score || 0)}`;
 }
@@ -104,13 +102,13 @@ export default function Home() {
   const [alert, setAlert] = useState<SignalPayload | null>(null);
   const [alertToastOpen, setAlertToastOpen] = useState(false);
 
-  const lastAlertAtRef = useRef<number>(0); // cooldown base
-  const lastSeenSignalAtRef = useRef<number>(0); // evita reprocesar señales reales
+  const lastAlertAtRef = useRef<number>(0);
+  const lastSeenSignalAtRef = useRef<number>(0);
 
-  // ✅ Anti-spam extra (clave para tu caso)
-  const lastAlertSigRef = useRef<string>(""); // no repetir misma firma
-  const lastAlertPriceRef = useRef<number | null>(null); // no repetir si no se movió el precio
-  const lastAlertActionRef = useRef<Action>("NONE"); // no repetir misma acción sin cambios
+  // ✅ Anti-spam extra
+  const lastAlertSigRef = useRef<string>("");
+  const lastAlertPriceRef = useRef<number | null>(null);
+  const lastAlertActionRef = useRef<Action>("NONE");
 
   // AudioContext se crea solo con gesto del usuario
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -223,7 +221,6 @@ export default function Home() {
     lastAlertPriceRef.current = Number.isFinite(sig.price) ? sig.price : null;
     lastAlertActionRef.current = sig.action;
 
-    // Sonido + vibración solo si activaste alertas
     if (alertsEnabled) {
       vibrate([120, 80, 120, 80, 180]);
       playBeep();
@@ -238,8 +235,12 @@ export default function Home() {
     }
   }
 
-  // Lee la señal de /api/signal y dispara popup + sonido + vibración
-  async function pollSignal(customURL?: string) {
+  /**
+   * ✅ pollSignal
+   * - Automático: respeta anti-spam
+   * - Manual (botones): SIEMPRE abre popup si verdict=true (no anti-spam)
+   */
+  async function pollSignal(customURL?: string, manual = false) {
     try {
       const url = customURL || signalURL;
 
@@ -256,9 +257,8 @@ export default function Home() {
         `OK: verdict=${sig.verdict} action=${sig.action} score=${sig.score} at=${sig.at} (URL=${url})`
       );
 
-      // ✅ Para señales reales: evita reprocesar la misma (at)
-      // Nota: en force=1 el "at" cambia siempre, por eso abajo usamos anti-spam por firma/precio
-      if (!forceMode) {
+      // Para automático: evita reprocesar señales reales por "at"
+      if (!forceMode && !manual) {
         if (sig.at <= lastSeenSignalAtRef.current) return;
         lastSeenSignalAtRef.current = sig.at;
       }
@@ -266,19 +266,22 @@ export default function Home() {
       if (!sig.verdict) return;
       if (!sig.action || sig.action === "NONE") return;
 
-      // ✅ Anti-spam: no repetir si es “la misma señal”
+      // ✅ Si es prueba MANUAL, abrimos siempre (aunque sea misma señal)
+      if (manual) {
+        openAlert(sig);
+        return;
+      }
+
+      // ✅ Anti-spam (solo automático)
       const sigKey = makeSignature(sig);
       if (sigKey === lastAlertSigRef.current) return;
 
-      // ✅ Anti-spam: si la acción no cambió y el precio no se movió “real”, NO alertar
       const sameAction = sig.action === lastAlertActionRef.current;
       if (sameAction && !hasMeaningfulMove(sig.price, lastAlertPriceRef.current)) {
         return;
       }
 
       const now = Date.now();
-
-      // Cooldown (mantiene seguridad). En force dejamos 0, pero anti-spam sigue activo.
       const cooldownMs = forceMode ? 0 : 60 * 60 * 1000;
       const minScore = forceMode ? 0 : 80;
 
@@ -310,7 +313,7 @@ export default function Home() {
 
   async function enableAlerts() {
     setAlertsEnabled(true);
-    playBeep(); // desbloquea audio por gesto
+    playBeep();
 
     if ("Notification" in window) {
       try {
@@ -323,7 +326,6 @@ export default function Home() {
 
   const scoreBar = alert ? clamp(alert.score, 0, 100) : 0;
 
-  const headerText = alert ? headlineFromAction(alert.action) : "";
   const headerBg =
     alert?.action === "SELL"
       ? "rgba(239, 68, 68, 0.15)"
@@ -349,7 +351,7 @@ export default function Home() {
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
         <h1 style={{ fontSize: 26, marginBottom: 10 }}>₿ BTC en tiempo real</h1>
 
-        {/* 🔎 DEBUG / PRUEBAS */}
+        {/* DEBUG / PRUEBAS */}
         <div
           style={{
             border: "1px solid #334155",
@@ -379,7 +381,7 @@ export default function Home() {
 
           <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
             <button
-              onClick={() => pollSignal()}
+              onClick={() => pollSignal(undefined, true)}
               style={{
                 padding: "10px 12px",
                 borderRadius: 12,
@@ -394,7 +396,7 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => pollSignal("/api/signal?force=1&action=BUY")}
+              onClick={() => pollSignal("/api/signal?force=1&action=BUY", true)}
               style={{
                 padding: "10px 12px",
                 borderRadius: 12,
@@ -409,7 +411,7 @@ export default function Home() {
             </button>
 
             <button
-              onClick={() => pollSignal("/api/signal?force=1&action=SELL")}
+              onClick={() => pollSignal("/api/signal?force=1&action=SELL", true)}
               style={{
                 padding: "10px 12px",
                 borderRadius: 12,
@@ -425,7 +427,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 🔔 Barra superior */}
+        {/* Barra superior */}
         <div
           style={{
             display: "flex",
@@ -510,14 +512,7 @@ export default function Home() {
 
           {status === "ok" && price != null && (
             <>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 16,
-                  flexWrap: "wrap",
-                  alignItems: "baseline",
-                }}
-              >
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "baseline" }}>
                 <div style={{ fontSize: 42, fontWeight: 800 }}>{formatUSD(price)}</div>
 
                 <div style={{ fontSize: 16 }}>
@@ -565,7 +560,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ✅ Popup de alerta */}
+      {/* Popup */}
       {alertToastOpen && alert && (
         <div
           onClick={() => setAlertToastOpen(false)}
@@ -637,7 +632,7 @@ export default function Home() {
                 <div
                   style={{
                     height: "100%",
-                    width: `${clamp(alert.score, 0, 100)}%`,
+                    width: `${scoreBar}%`,
                     background: alert.score >= 80 ? "#22c55e" : "#fbbf24",
                   }}
                 />
