@@ -19,12 +19,7 @@ async function sendTelegramHTML(html: string) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!token || !chatId) {
-    return {
-      ok: false,
-      error: "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID",
-      hasToken: Boolean(token),
-      hasChatId: Boolean(chatId),
-    };
+    return { ok: false, error: "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID" };
   }
 
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -83,9 +78,28 @@ function pct(a: number, b: number) {
   return ((a - b) / b) * 100;
 }
 
+async function fetchHourlyBTC(hours: number) {
+  // CryptoCompare: histohour?limit=2000 max
+  // hours=240 => 10 días, suficiente para EMA200
+  const limit = Math.min(2000, Math.max(210, hours));
+  const url = `https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit=${limit}`;
+
+  const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok || !data || data?.Response !== "Success") {
+    return { ok: false, status: res.status, data };
+  }
+
+  // Data.Data is array of candles
+  const arr = data?.Data?.Data || [];
+  const closes = arr.map((c: any) => Number(c.close)).filter((n: any) => Number.isFinite(n));
+  return { ok: true, closes, raw: data };
+}
+
 export async function POST(req: Request) {
   try {
-    // ✅ AUTH (Bearer)
+    // ✅ AUTH
     const expected = (process.env.CRON_SECRET || "").trim();
     const provided = getBearer(req);
 
@@ -93,30 +107,23 @@ export async function POST(req: Request) {
       return json({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    // ✅ force param
     const urlObj = new URL(req.url);
     const force = urlObj.searchParams.get("force") === "1";
 
-    // ✅ Data REAL desde CoinGecko (hourly, 10 días)
-    const cgUrl =
-      "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=10&interval=hourly";
-
-    const cg = await fetch(cgUrl, {
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
-
-    if (!cg.ok) {
-      return json({ ok: false, error: "CoinGecko error", status: cg.status }, 500);
+    // ✅ Fetch REAL data (CryptoCompare)
+    const got = await fetchHourlyBTC(240);
+    if (!got.ok) {
+      return json(
+        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data },
+        500
+      );
     }
 
-    const data = await cg.json();
-    const prices: [number, number][] = data?.prices || [];
-    if (prices.length < 210) {
-      return json({ ok: false, error: "Not enough price data", points: prices.length }, 500);
+    const closes = got.closes;
+    if (closes.length < 210) {
+      return json({ ok: false, error: "Not enough price data", points: closes.length }, 500);
     }
 
-    const closes = prices.map((p) => p[1]);
     const price = closes[closes.length - 1];
 
     const ema50 = ema(closes.slice(-60), 50);
@@ -133,7 +140,7 @@ export async function POST(req: Request) {
     const change1h = pct(price, price1h);
     const change24h = pct(price, price24h);
 
-    // ✅ Score REAL (0-100) + motivos
+    // ✅ Score REAL (0-100)
     let score = 0;
     const reasons: string[] = [];
 
@@ -189,14 +196,12 @@ export async function POST(req: Request) {
     // ✅ Más activo
     const VERY_GOOD_SCORE = 75;
 
-    // ✅ Condición “buena oportunidad”
     const verdict =
       score >= VERY_GOOD_SCORE &&
       price >= ema200 &&
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-    // ✅ Envío (force=1 SIEMPRE manda)
     const shouldSend = force || (verdict && score >= VERY_GOOD_SCORE);
 
     let telegram: any = { ok: false, skipped: true };
@@ -216,7 +221,8 @@ export async function POST(req: Request) {
         `<b>Rebote 2h:</b> +${rebound2h.toFixed(2)}%\n\n` +
         `<b>Motivos:</b>\n` +
         `${reasons.slice(0, 6).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
-        `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}`;
+        `<b>Hora:</b> ${escapeHTML(new Date().toLocaleString())}` +
+        (force ? `\n\n<b>Modo:</b> PRUEBA (force=1)` : "");
 
       telegram = await sendTelegramHTML(msg);
     }
@@ -236,7 +242,8 @@ export async function POST(req: Request) {
       change24h,
       rebound2h,
       reason: reasons,
-      telegram, // ✅ aquí verás si Telegram respondió ok
+      telegram,
+      source: "CryptoCompare",
     });
   } catch (err: any) {
     return json({ ok: false, error: err?.message ?? String(err) }, 500);
