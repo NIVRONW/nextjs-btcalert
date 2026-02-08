@@ -240,7 +240,7 @@ export async function POST(req: Request) {
     `${(payload.reason || []).slice(0, 4).map((r) => `• ${r}`).join("\n")}\n\n` +
     `<b>Hora:</b> ${new Date(payload.at).toLocaleString()}`;
 
-  await sendTelegram(msg);
+  await sendTelegramHTML(msg);
 }
 
     return NextResponse.json({ ok: true, ...payload }, { status: 200 });
