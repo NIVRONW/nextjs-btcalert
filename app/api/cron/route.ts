@@ -1,19 +1,31 @@
 export const dynamic = "force-dynamic";
 
+/** Respuesta JSON */
 function json(data: any, status = 200) {
   return Response.json(data, { status });
 }
 
+/** Lee token Bearer */
 function getBearer(req: Request) {
   const auth = req.headers.get("authorization") || "";
   if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
   return "";
 }
 
+/** Escapa para HTML en Telegram */
 function escapeHTML(s: string) {
   return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+/** Formato numérico: 1,000.01 */
+function formatNumberUS(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/** Enviar Telegram (HTML) */
 async function sendTelegramHTML(html: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -37,6 +49,7 @@ async function sendTelegramHTML(html: string) {
   return { ok: res.ok, status: res.status, data };
 }
 
+/** EMA */
 function ema(values: number[], period: number) {
   const k = 2 / (period + 1);
   let e = values[0];
@@ -44,6 +57,7 @@ function ema(values: number[], period: number) {
   return e;
 }
 
+/** RSI */
 function rsi(values: number[], period = 14) {
   if (values.length < period + 1) return null;
 
@@ -73,17 +87,22 @@ function rsi(values: number[], period = 14) {
   return 100 - 100 / (1 + rs);
 }
 
+/** % cambio */
 function pct(a: number, b: number) {
   if (!b) return 0;
   return ((a - b) / b) * 100;
 }
 
+/** Precios hora a hora de BTC (CryptoCompare) */
 async function fetchHourlyBTC(limitHours: number) {
-  // CryptoCompare histohour: limit max 2000
   const limit = Math.min(2000, Math.max(210, limitHours));
   const url = `https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit=${limit}`;
 
-  const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    cache: "no-store",
+  });
+
   const data = await res.json().catch(() => null);
 
   if (!res.ok || !data || data?.Response !== "Success") {
@@ -95,12 +114,12 @@ async function fetchHourlyBTC(limitHours: number) {
     .map((c: any) => Number(c.close))
     .filter((n: any) => Number.isFinite(n));
 
-  return { ok: true, closes, raw: data };
+  return { ok: true, closes };
 }
 
 export async function POST(req: Request) {
   try {
-    // ✅ AUTH Bearer
+    // ✅ AUTH: Bearer CRON_SECRET
     const expected = (process.env.CRON_SECRET || "").trim();
     const provided = getBearer(req);
 
@@ -108,12 +127,12 @@ export async function POST(req: Request) {
       return json({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    // ✅ force
+    // ✅ force=1 (prueba)
     const urlObj = new URL(req.url);
     const force = urlObj.searchParams.get("force") === "1";
 
-    // ✅ Data REAL (CryptoCompare)
-    const got = await fetchHourlyBTC(240); // ~10 días
+    // ✅ Data real
+    const got = await fetchHourlyBTC(240); // ~10 dias
     if (!got.ok) {
       return json(
         { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data },
@@ -128,6 +147,7 @@ export async function POST(req: Request) {
 
     const price = closes[closes.length - 1];
 
+    // Indicadores internos (NO se muestran en Telegram)
     const ema50 = ema(closes.slice(-60), 50);
     const ema200 = ema(closes.slice(-220), 200);
     const rsi14 = rsi(closes.slice(-60), 14);
@@ -136,66 +156,56 @@ export async function POST(req: Request) {
     const low2h = Math.min(...last3);
     const rebound2h = pct(price, low2h);
 
-    const price1h = closes.length >= 2 ? closes[closes.length - 2] : price;
-    const price24h = closes.length >= 25 ? closes[closes.length - 25] : price;
-
-    const change1h = pct(price, price1h);
-    const change24h = pct(price, price24h);
-
-    // ✅ Score (0-100) + motivos
+    // ✅ Score + motivos (interno)
     let score = 0;
     const reasons: string[] = [];
 
     if (price >= ema200) {
       score += 30;
-      reasons.push("Precio >= EMA200 (tendencia alcista)");
+      reasons.push("Tendencia positiva (precio por encima del promedio largo)");
     } else {
-      reasons.push("Precio < EMA200 (tendencia débil)");
+      reasons.push("Tendencia debil (precio por debajo del promedio largo)");
     }
 
     if (ema50 >= ema200) {
       score += 25;
-      reasons.push("EMA50 >= EMA200 (momentum positivo)");
+      reasons.push("Momentum positivo (promedio corto por encima del largo)");
     } else {
-      reasons.push("EMA50 < EMA200 (momentum débil)");
+      reasons.push("Momentum debil (promedio corto por debajo del largo)");
     }
 
     const distEma50 = Math.abs(pct(price, ema50));
     if (distEma50 <= 0.35) {
       score += 20;
-      reasons.push("Precio cerca de EMA50 (pullback sano)");
+      reasons.push("Entrada favorable (precio cerca del promedio corto)");
     } else if (distEma50 <= 0.8) {
       score += 10;
-      reasons.push("Precio moderadamente cerca de EMA50");
+      reasons.push("Entrada aceptable (precio relativamente cerca del promedio corto)");
     } else {
-      reasons.push("Precio lejos de EMA50 (entrada menos favorable)");
+      reasons.push("Entrada menos favorable (precio lejos del promedio corto)");
     }
 
     if (rsi14 !== null) {
       if (rsi14 >= 42 && rsi14 <= 62) {
         score += 15;
-        reasons.push(`RSI14 saludable (${rsi14.toFixed(1)})`);
+        reasons.push("Impulso saludable (ni sobrecomprado ni sobrevendido)");
       } else if (rsi14 > 62 && rsi14 <= 72) {
         score += 6;
-        reasons.push(`RSI14 algo alto (${rsi14.toFixed(1)})`);
+        reasons.push("Impulso algo alto (posible sobrecompra ligera)");
       } else if (rsi14 < 42 && rsi14 >= 35) {
         score += 6;
-        reasons.push(`RSI14 algo bajo (${rsi14.toFixed(1)})`);
+        reasons.push("Impulso algo bajo (posible rebote)");
       } else {
-        reasons.push(`RSI14 extremo (${rsi14.toFixed(1)})`);
+        reasons.push("Impulso extremo (cautela)");
       }
-    } else {
-      reasons.push("RSI14 no disponible");
     }
 
     if (rebound2h >= 0.30) {
       score += 10;
-      reasons.push(`Rebote >= 0.3% desde mínimo 2h (+${rebound2h.toFixed(2)}%)`);
-    } else {
-      reasons.push(`Rebote 2h bajo (+${rebound2h.toFixed(2)}%)`);
+      reasons.push("Rebote reciente confirmado");
     }
 
-    // ✅ Más activo
+    // ✅ Mas activo (oportunidad real)
     const VERY_GOOD_SCORE = 75;
 
     const verdict =
@@ -204,43 +214,54 @@ export async function POST(req: Request) {
       ema50 >= ema200 &&
       (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
 
-    // ✅ force=1 SIEMPRE manda
-    const shouldSend = force || (verdict && score >= VERY_GOOD_SCORE);
+    // ✅ Enviar si force=1 o si oportunidad real
+    const shouldSend = force || verdict;
 
     let telegram: any = { ok: false, skipped: true };
 
     if (shouldSend) {
       const headline = "🚨 AHORA ES UN BUEN MOMENTO PARA INVERTIR 🚨";
 
-const msg =
-  `<b>${escapeHTML(headline)}</b>\n\n` +
-  `<b>Precio actual:</b> $${price.toFixed(2)}\n\n` +
-  `<b>Motivo:</b>\n` +
-  `${reasons.slice(0, 3).map((r) => `• ${escapeHTML(r)}`).join("\n")}\n\n` +
-  `<b>Fecha y hora:</b> ${escapeHTML(new Date().toLocaleString())}`;
+      const ahora = new Date();
+      const hora = ahora.toLocaleTimeString("en-US");
+      const fecha = ahora.toLocaleDateString("en-US");
 
-await sendTelegram(mensaje);
+      const motivos = reasons.slice(0, 3);
+      const motivoTxt =
+        motivos.length > 0
+          ? motivos.map((r) => `• ${escapeHTML(r)}`).join("\n")
+          : "• Condiciones favorables detectadas";
+
+      const msg =
+        `<b>${escapeHTML(headline)}</b>\n\n` +
+        `<b>PRECIO:</b> $${formatNumberUS(price)}\n\n` +
+        `<b>MOTIVO:</b>\n${motivoTxt}\n\n` +
+        `<b>HORA:</b> ${escapeHTML(hora)}\n` +
+        `<b>FECHA:</b> ${escapeHTML(fecha)}`;
+
+      telegram = await sendTelegramHTML(msg);
     }
 
+    // ✅ Respuesta limpia (PowerShell no muestra indicadores)
     return json({
-  ok: true,
-  at: Date.now(),
-  price,
-  alert: shouldSend,
-  force,
-  reason: reasons.slice(0, 3),
-  telegram: {
-    ok: telegram?.ok ?? false,
-    status: telegram?.status ?? null,
-  },
-  source: "CryptoCompare",
-});
-
+      ok: true,
+      at: Date.now(),
+      price,
+      alert: shouldSend,
+      force,
+      reason: reasons.slice(0, 3),
+      telegram: {
+        ok: telegram?.ok ?? false,
+        status: telegram?.status ?? null,
+      },
+      source: "CryptoCompare",
+    });
   } catch (err: any) {
     return json({ ok: false, error: err?.message ?? String(err) }, 500);
   }
 }
 
+// Permite GET si lo necesitas (opcional)
 export async function GET(req: Request) {
   return POST(req);
 }
