@@ -217,7 +217,7 @@ export default function Home() {
       }}
     >
       <div style={{ maxWidth: 780, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 26, marginBottom: 20 }}>₿ BTCALERT – Panel Inteligente</h1>
+        <h1 style={{ fontSize: 26, marginBottom: 20 }}>₿ BTCALERT – TE ALERTA EN QUE MOMENTO INVERTIR</h1>
 
         {status === "loading" && <p>Cargando datos...</p>}
 
