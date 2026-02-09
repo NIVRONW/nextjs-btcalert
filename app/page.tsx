@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "loading" | "ok" | "error";
@@ -14,9 +15,9 @@ type SignalPayload = {
   rsi14: number;
   ema50: number;
   ema200: number;
-  bounce2h?: number;
-  change1h?: number;
-  change24h?: number;
+  bounce2h?: number; // %
+  change1h?: number; // %
+  change24h?: number; // %
 };
 
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -48,7 +49,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const cssW = canvas.clientWidth;
   const cssH = canvas.clientHeight;
 
-  // si aún no tiene layout (0x0), no dibujes
+  // si aún no tiene layout, no dibujes
   if (!cssW || !cssH) return;
 
   canvas.width = Math.floor(cssW * dpr);
@@ -58,7 +59,6 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const W = cssW;
   const H = cssH;
 
-  // Fondo del chart
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.fillRect(0, 0, W, H);
@@ -85,7 +85,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const bodyW = Math.max(2, Math.min(10, xStep * 0.62));
   const yOf = (p: number) => padT + (maxP - p) * (innerH / span);
 
-  // grid suave (horizontal)
+  // grid horizontal suave
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(255,255,255,0.06)";
   const gridLines = 4;
@@ -125,20 +125,20 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   }
 }
 
-function headlineFromAction(action: Action) {
-  if (action === "SELL") return "🔴 Señal de venta";
+function headline(action: Action) {
   if (action === "BUY") return "🟢 Señal de compra";
+  if (action === "SELL") return "🔴 Señal de venta";
   return "🟡 Sin señal clara";
 }
 
-function subtitleFromAction(action: Action) {
+function subtitle(action: Action) {
   if (action === "BUY") return "Condiciones favorables para compra (confirmación aplicada).";
   if (action === "SELL") return "Condiciones favorables para venta.";
   return "El mercado no muestra una oportunidad sólida ahora mismo.";
 }
 
 export default function Home() {
-  const DEPLOY_MARKER = "BTCALERT-MOCK-EXACT-ONEFILE-V1";
+  const DEPLOY_MARKER = "BTCALERT-MOCK-RIGHTPANEL-PNG-V1";
   const gold = "#f5b301";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
@@ -150,7 +150,7 @@ export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // confirmación BUY (como veníamos)
+  // confirmación BUY como veníamos usando
   const BUY_MIN_SCORE = 80;
 
   async function loadSignal() {
@@ -164,7 +164,6 @@ export default function Home() {
       } else {
         setSignal(last);
       }
-
       setStatus("ok");
     } catch {
       setStatus("error");
@@ -204,7 +203,7 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
-  // ✅ FIX canvas PROD + resize
+  // ✅ FIX: draw reliable en producción + resize
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -223,47 +222,38 @@ export default function Home() {
   const updatedAt = signal?.at ? new Date(signal.at).toLocaleString() : "";
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
-  const pageGlow = useMemo(() => {
-    // el mock tiene un glow cálido general; lo mantenemos estable + un toque según señal
+  const bgGlow = useMemo(() => {
+    // look del mock: glow cálido arriba + viñeta oscura
     const base =
-      "radial-gradient(1200px 520px at 50% -10%, rgba(245,179,1,0.26), rgba(0,0,0,0) 55%),";
+      "radial-gradient(1200px 520px at 50% -10%, rgba(245,179,1,0.22), rgba(0,0,0,0) 58%),";
     if (!signal) return base;
     if (signal.action === "BUY")
-      return (
-        base +
-        "radial-gradient(900px 520px at 18% 0%, rgba(34,197,94,0.14), rgba(0,0,0,0) 58%),"
-      );
+      return base + "radial-gradient(900px 520px at 20% 0%, rgba(34,197,94,0.10), rgba(0,0,0,0) 60%),";
     if (signal.action === "SELL")
-      return (
-        base +
-        "radial-gradient(900px 520px at 18% 0%, rgba(239,68,68,0.14), rgba(0,0,0,0) 58%),"
-      );
+      return base + "radial-gradient(900px 520px at 20% 0%, rgba(239,68,68,0.10), rgba(0,0,0,0) 60%),";
     return base;
   }, [signal]);
 
   return (
-    <main className="page" style={{ backgroundImage: pageGlow }}>
-      {/* marker */}
+    <main className="page" style={{ backgroundImage: bgGlow }}>
       <div className="marker">{DEPLOY_MARKER}</div>
 
-      {/* Flare cinematográfico */}
+      {/* flare + línea dorada superior */}
       <div className="topFlare" aria-hidden="true" />
       <div className="topLine" aria-hidden="true" />
 
       <div className="wrap">
-        {/* HEADER UNA SOLA LÍNEA */}
+        {/* HEADER FINAL: una sola línea, izquierda */}
         <header className="heroTitle">
           <span className="heroBtc">₿ BTCALERT</span>
           <span className="heroDash"> – </span>
           <span className="heroRest">MONITOREO Y ALERTA DE INVERSION</span>
         </header>
 
-        {/* Card */}
         <section className="card">
           <div className="cardInnerGlow" aria-hidden="true" />
           <div className="cardBottomGold" aria-hidden="true" />
 
-          {/* Izquierda */}
           <div className="leftCol">
             {status === "loading" && <div className="hint">Cargando datos...</div>}
             {status === "error" && <div className="hintErr">Error cargando señal.</div>}
@@ -284,9 +274,9 @@ export default function Home() {
                               : gold,
                         }}
                       />
-                      <div className="statusTitle">{headlineFromAction(signal.action)}</div>
+                      <div className="statusTitle">{headline(signal.action)}</div>
                     </div>
-                    <div className="statusSub">{subtitleFromAction(signal.action)}</div>
+                    <div className="statusSub">{subtitle(signal.action)}</div>
                   </div>
 
                   <div className="updatedBox">
@@ -295,10 +285,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Precio dorado */}
                 <div className="priceGold">{formatUSD(signal.price)}</div>
 
-                {/* Score */}
                 <div className="scoreBlock">
                   <div className="scoreLabel">Score</div>
                   <div className="scoreValue">{signal.score}/100</div>
@@ -314,7 +302,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Métricas */}
                 <div className="grid4">
                   <div className="mBox">
                     <div className="mLabel">RSI (14)</div>
@@ -352,17 +339,16 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Velas */}
                 <div className="candlesTitle">Gráfico de velas (últimas 72 horas)</div>
 
                 <div className="chartFrame">
                   <div className="chartBottomGold" aria-hidden="true" />
-                  {candlesStatus === "loading" && (
-                    <div className="chartHint">Cargando velas...</div>
-                  )}
+
+                  {candlesStatus === "loading" && <div className="chartHint">Cargando velas...</div>}
                   {candlesStatus === "error" && (
                     <div className="chartErr">
-                      No se pudieron cargar velas. <span className="chartErrDet">{candlesError}</span>
+                      No se pudieron cargar velas.{" "}
+                      <span className="chartErrDet">{candlesError}</span>
                     </div>
                   )}
 
@@ -374,57 +360,25 @@ export default function Home() {
             )}
           </div>
 
-          {/* Derecha (branding) */}
+          {/* PANEL DERECHO COMO MOCK */}
           <aside className="rightCol">
             <div className="brandBlock">
               <div className="brandSmall">Developed by</div>
 
-              {/* Logo "N DIGITAL" (SVG inline, sin archivos externos) */}
-              <div className="brandLogo">
-                <svg width="120" height="120" viewBox="0 0 120 120" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stopColor="#9aa3b2" />
-                      <stop offset="0.45" stopColor="#2a3342" />
-                      <stop offset="1" stopColor="#0b1220" />
-                    </linearGradient>
-                    <linearGradient id="g2" x1="0" y1="1" x2="1" y2="0">
-                      <stop offset="0" stopColor="#22c55e" />
-                      <stop offset="0.55" stopColor="#60a5fa" />
-                      <stop offset="1" stopColor="#a855f7" />
-                    </linearGradient>
-                  </defs>
-
-                  <rect x="8" y="8" width="104" height="104" rx="18" fill="url(#g1)" opacity="0.9" />
-                  <path
-                    d="M32 88V32h12l32 40V32h12v56H76L44 48v40H32z"
-                    fill="rgba(255,255,255,0.12)"
-                  />
-                  <path
-                    d="M38 86V34h10l34 42V34h10v52H78L48 50v36H38z"
-                    fill="rgba(255,255,255,0.18)"
-                  />
-                  <path
-                    d="M30 92c28-8 44-28 62-58"
-                    fill="none"
-                    stroke="url(#g2)"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M92 34l-8 2 4-7"
-                    fill="none"
-                    stroke="url(#g2)"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-
-                <div className="brandDigital">DIGITAL</div>
+              <div className="brandLogoWrap">
+                <Image
+                  src="/ndigital.png"
+                  alt="N Digital"
+                  width={170}
+                  height={170}
+                  priority
+                  style={{ width: "170px", height: "auto" }}
+                />
               </div>
 
-              <div className="brandSmall" style={{ marginTop: 14 }}>Powered by</div>
+              <div className="brandSmall" style={{ marginTop: 18 }}>
+                Powered by
+              </div>
               <div className="brandChatGPT">CHATGPT</div>
               <div className="brandOpenAI">OpenAI</div>
             </div>
@@ -443,16 +397,14 @@ export default function Home() {
           overflow-x: hidden;
         }
 
-        /* viñeta (bordes oscuros) */
+        /* viñeta */
         .page:before {
           content: "";
           position: fixed;
           inset: 0;
           pointer-events: none;
-          background:
-            radial-gradient(1200px 700px at 50% 40%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 85%),
-            radial-gradient(900px 520px at 10% 20%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 92%);
-          mix-blend-mode: normal;
+          background: radial-gradient(1200px 700px at 50% 40%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.55) 85%),
+            radial-gradient(900px 520px at 10% 20%, rgba(0, 0, 0, 0) 35%, rgba(0, 0, 0, 0.55) 92%);
           z-index: 0;
         }
 
@@ -473,7 +425,7 @@ export default function Home() {
           z-index: 2;
         }
 
-        /* flare superior */
+        /* flare */
         .topFlare {
           position: fixed;
           top: -80px;
@@ -483,9 +435,9 @@ export default function Home() {
           height: 220px;
           background: radial-gradient(
             closest-side,
-            rgba(245,179,1,0.35),
-            rgba(245,179,1,0.12) 40%,
-            rgba(245,179,1,0) 72%
+            rgba(245, 179, 1, 0.35),
+            rgba(245, 179, 1, 0.12) 40%,
+            rgba(245, 179, 1, 0) 72%
           );
           filter: blur(2px);
           pointer-events: none;
@@ -500,38 +452,47 @@ export default function Home() {
           width: min(980px, 86vw);
           height: 2px;
           border-radius: 999px;
-          background: linear-gradient(90deg, rgba(245,179,1,0), rgba(245,179,1,0.95), rgba(245,179,1,0));
-          box-shadow: 0 0 26px rgba(245,179,1,0.35);
+          background: linear-gradient(
+            90deg,
+            rgba(245, 179, 1, 0),
+            rgba(245, 179, 1, 0.95),
+            rgba(245, 179, 1, 0)
+          );
+          box-shadow: 0 0 26px rgba(245, 179, 1, 0.35);
           pointer-events: none;
           z-index: 2;
         }
 
-        /* header una sola línea */
+        /* header */
         .heroTitle {
           text-align: left;
           font-weight: 900;
           font-size: 34px;
           letter-spacing: 0.6px;
           margin-bottom: 18px;
-          color: rgba(255,255,255,0.92);
-          text-shadow: 0 0 28px rgba(0,0,0,0.55);
+          color: rgba(255, 255, 255, 0.92);
+          text-shadow: 0 0 28px rgba(0, 0, 0, 0.55);
         }
-
         .heroBtc {
           color: #f5b301;
-          text-shadow: 0 0 24px rgba(245,179,1,0.35);
+          text-shadow: 0 0 24px rgba(245, 179, 1, 0.35);
         }
-        .heroDash { color: rgba(255,255,255,0.65); }
-        .heroRest { color: rgba(255,255,255,0.85); font-weight: 900; }
+        .heroDash {
+          color: rgba(255, 255, 255, 0.65);
+        }
+        .heroRest {
+          color: rgba(255, 255, 255, 0.85);
+          font-weight: 900;
+        }
 
-        /* card principal */
+        /* card */
         .card {
           position: relative;
           border-radius: 26px;
           padding: 28px;
-          background: linear-gradient(160deg, rgba(15,22,40,0.92), rgba(6,10,18,0.94));
-          border: 1px solid rgba(255,255,255,0.08);
-          box-shadow: 0 35px 110px rgba(0,0,0,0.72);
+          background: linear-gradient(160deg, rgba(15, 22, 40, 0.92), rgba(6, 10, 18, 0.94));
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 35px 110px rgba(0, 0, 0, 0.72);
           backdrop-filter: blur(10px);
           overflow: hidden;
           display: grid;
@@ -542,9 +503,8 @@ export default function Home() {
         .cardInnerGlow {
           position: absolute;
           inset: -40px;
-          background:
-            radial-gradient(900px 520px at 12% 0%, rgba(245,179,1,0.12), rgba(0,0,0,0) 60%),
-            radial-gradient(900px 520px at 90% 40%, rgba(255,255,255,0.06), rgba(0,0,0,0) 60%);
+          background: radial-gradient(900px 520px at 12% 0%, rgba(245, 179, 1, 0.12), rgba(0, 0, 0, 0) 60%),
+            radial-gradient(900px 520px at 90% 40%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0) 60%);
           pointer-events: none;
           z-index: 0;
         }
@@ -555,15 +515,18 @@ export default function Home() {
           right: 0;
           bottom: 0;
           height: 3px;
-          background: linear-gradient(90deg, rgba(245,179,1,0), rgba(245,179,1,0.6), rgba(245,179,1,0));
+          background: linear-gradient(90deg, rgba(245, 179, 1, 0), rgba(245, 179, 1, 0.6), rgba(245, 179, 1, 0));
           opacity: 0.55;
           pointer-events: none;
           z-index: 0;
         }
 
-        .leftCol, .rightCol { position: relative; z-index: 1; }
+        .leftCol,
+        .rightCol {
+          position: relative;
+          z-index: 1;
+        }
 
-        /* top row */
         .topRow {
           display: flex;
           align-items: flex-start;
@@ -583,7 +546,7 @@ export default function Home() {
           height: 10px;
           border-radius: 999px;
           display: inline-block;
-          box-shadow: 0 0 18px rgba(245,179,1,0.25);
+          box-shadow: 0 0 18px rgba(245, 179, 1, 0.25);
         }
 
         .statusTitle {
@@ -615,7 +578,6 @@ export default function Home() {
           font-size: 13px;
         }
 
-        /* precio dorado estilo mock */
         .priceGold {
           margin-top: 6px;
           font-size: 66px;
@@ -624,35 +586,57 @@ export default function Home() {
           background: linear-gradient(180deg, #fff3c8 0%, #f5b301 58%, #c98600 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          text-shadow: 0 0 42px rgba(245,179,1,0.35);
+          text-shadow: 0 0 42px rgba(245, 179, 1, 0.35);
         }
 
-        /* score */
-        .scoreBlock { margin-top: 18px; }
-        .scoreLabel { opacity: 0.7; margin-bottom: 6px; }
-        .scoreValue { font-size: 32px; font-weight: 950; margin-bottom: 10px; }
+        .scoreBlock {
+          margin-top: 18px;
+        }
+        .scoreLabel {
+          opacity: 0.7;
+          margin-bottom: 6px;
+        }
+        .scoreValue {
+          font-size: 32px;
+          font-weight: 950;
+          margin-bottom: 10px;
+        }
         .scoreRail {
           height: 12px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.08);
+          background: rgba(255, 255, 255, 0.08);
           overflow: hidden;
         }
-        .scoreFill { height: 100%; border-radius: 999px; }
+        .scoreFill {
+          height: 100%;
+          border-radius: 999px;
+        }
 
-        /* grid métricas */
         .grid4 {
           margin-top: 22px;
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 18px;
         }
-        .mBox { }
-        .mLabel { opacity: 0.65; font-weight: 800; font-size: 13px; }
-        .mValue { font-weight: 950; font-size: 28px; margin-top: 4px; }
-        .mSmall { opacity: 0.6; margin-top: 6px; font-size: 13px; }
-        .mRight { text-align: right; }
+        .mLabel {
+          opacity: 0.65;
+          font-weight: 800;
+          font-size: 13px;
+        }
+        .mValue {
+          font-weight: 950;
+          font-size: 28px;
+          margin-top: 4px;
+        }
+        .mSmall {
+          opacity: 0.6;
+          margin-top: 6px;
+          font-size: 13px;
+        }
+        .mRight {
+          text-align: right;
+        }
 
-        /* candles */
         .candlesTitle {
           margin-top: 18px;
           font-weight: 950;
@@ -663,8 +647,8 @@ export default function Home() {
         .chartFrame {
           margin-top: 10px;
           border-radius: 20px;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(0,0,0,0.12);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(0, 0, 0, 0.12);
           padding: 14px;
           position: relative;
           overflow: hidden;
@@ -677,14 +661,25 @@ export default function Home() {
           bottom: 10px;
           height: 2px;
           border-radius: 999px;
-          background: linear-gradient(90deg, rgba(245,179,1,0), rgba(245,179,1,0.55), rgba(245,179,1,0));
+          background: linear-gradient(90deg, rgba(245, 179, 1, 0), rgba(245, 179, 1, 0.55), rgba(245, 179, 1, 0));
           opacity: 0.35;
           pointer-events: none;
         }
 
-        .chartHint { opacity: 0.75; margin-bottom: 10px; font-weight: 700; }
-        .chartErr { color: #fca5a5; margin-bottom: 10px; font-weight: 800; }
-        .chartErrDet { opacity: 0.85; font-weight: 700; }
+        .chartHint {
+          opacity: 0.75;
+          margin-bottom: 10px;
+          font-weight: 700;
+        }
+        .chartErr {
+          color: #fca5a5;
+          margin-bottom: 10px;
+          font-weight: 800;
+        }
+        .chartErrDet {
+          opacity: 0.85;
+          font-weight: 700;
+        }
 
         .chartBox {
           width: 100%;
@@ -696,10 +691,10 @@ export default function Home() {
           height: 100%;
           display: block;
           border-radius: 16px;
-          background: rgba(0,0,0,0.22);
+          background: rgba(0, 0, 0, 0.22);
         }
 
-        /* panel derecho branding */
+        /* right panel */
         .rightCol {
           display: flex;
           align-items: center;
@@ -712,7 +707,7 @@ export default function Home() {
           flex-direction: column;
           align-items: center;
           gap: 4px;
-          opacity: 0.88;
+          opacity: 0.9;
         }
 
         .brandSmall {
@@ -721,27 +716,20 @@ export default function Home() {
           opacity: 0.72;
         }
 
-        .brandLogo {
+        .brandLogoWrap {
+          margin-top: 10px;
           display: flex;
-          flex-direction: column;
           align-items: center;
-          gap: 6px;
-          margin-top: 6px;
-        }
-
-        .brandDigital {
-          font-weight: 950;
-          letter-spacing: 4px;
-          font-size: 16px;
-          color: rgba(140, 214, 255, 0.8);
-          text-shadow: 0 0 14px rgba(56,189,248,0.25);
+          justify-content: center;
+          opacity: 0.95;
+          filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.65));
         }
 
         .brandChatGPT {
           font-weight: 950;
           font-size: 22px;
           letter-spacing: 1px;
-          color: rgba(255,255,255,0.9);
+          color: rgba(255, 255, 255, 0.9);
         }
 
         .brandOpenAI {
@@ -750,26 +738,52 @@ export default function Home() {
           opacity: 0.75;
         }
 
-        /* hints */
-        .hint { opacity: 0.8; font-weight: 700; }
-        .hintErr { color: #f87171; font-weight: 800; }
+        .hint {
+          opacity: 0.8;
+          font-weight: 700;
+        }
+        .hintErr {
+          color: #f87171;
+          font-weight: 800;
+        }
 
         /* responsive */
         @media (max-width: 980px) {
-          .heroTitle { text-align: center; font-size: 28px; }
-          .card { grid-template-columns: 1fr; }
-          .updatedBox { min-width: unset; }
-          .rightCol { margin-top: 14px; }
+          .heroTitle {
+            text-align: center;
+            font-size: 28px;
+          }
+          .card {
+            grid-template-columns: 1fr;
+          }
+          .updatedBox {
+            min-width: unset;
+          }
+          .rightCol {
+            margin-top: 14px;
+          }
         }
         @media (max-width: 760px) {
-          .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .mRight { text-align: left; }
-          .priceGold { font-size: 54px; }
+          .grid4 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .mRight {
+            text-align: left;
+          }
+          .priceGold {
+            font-size: 54px;
+          }
         }
         @media (max-width: 520px) {
-          .grid4 { grid-template-columns: 1fr; }
-          .page { padding: 26px 14px; }
-          .chartBox { height: 240px; }
+          .grid4 {
+            grid-template-columns: 1fr;
+          }
+          .page {
+            padding: 26px 14px;
+          }
+          .chartBox {
+            height: 240px;
+          }
         }
       `}</style>
     </main>
