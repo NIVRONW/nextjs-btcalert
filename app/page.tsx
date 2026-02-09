@@ -144,7 +144,7 @@ function drawCandles(
 
 export default function Home() {
   // 🔒 marcador para saber si Vercel está desplegando TU commit
-  const DEPLOY_MARKER = "DEPLOY-2026-02-09-HEADER-2LINES-V1";
+  const DEPLOY_MARKER = "BTCALERT-FORCE-DEPLOY-TEST-V2";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
