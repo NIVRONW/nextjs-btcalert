@@ -393,15 +393,20 @@ export default function Home() {
 
             {/* precio */}
             <div
-              style={{
-                fontSize: 58,
-                fontWeight: 900,
-                marginTop: 10,
-                letterSpacing: 0.3,
-              }}
-            >
-              {formatUSD(signal.price)}
-            </div>
+  style={{
+    fontSize: 64,
+    fontWeight: 900,
+    marginTop: 14,
+    letterSpacing: 0.5,
+    background: "linear-gradient(180deg, #fff3c4, #f5b301)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+    textShadow: "0 0 24px rgba(245,179,1,0.25)",
+  }}
+>
+  {formatUSD(signal.price)}
+</div>
+
 
             {/* score */}
             <div style={{ marginTop: 18 }}>
