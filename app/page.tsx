@@ -14,9 +14,8 @@ type SignalPayload = {
   rsi14: number;
   ema50: number;
   ema200: number;
-  change1h?: number;
-  change24h?: number;
-  rebound2h?: number;
+  // opcional si lo tienes:
+  // bounce2h?: number;
 };
 
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -33,10 +32,16 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function formatPct(n?: number) {
-  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
-  const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(2)}%`;
+function headlineFromAction(action: Action) {
+  if (action === "SELL") return "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴";
+  if (action === "BUY") return "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
+  return "";
+}
+
+function badgeFromAction(action: Action) {
+  if (action === "SELL") return { dot: "🔴", title: "Señal de VENTA", color: "#fb7185" };
+  if (action === "BUY") return { dot: "🟢", title: "Señal de COMPRA", color: "#34d399" };
+  return { dot: "🟡", title: "Sin señal clara", color: "#facc15" };
 }
 
 async function fetchJSON(url: string) {
@@ -46,219 +51,201 @@ async function fetchJSON(url: string) {
   return JSON.parse(text);
 }
 
-function subtitleFromAction(action: Action) {
-  if (action === "BUY") return "Oportunidad detectada: COMPRA";
-  if (action === "SELL") return "Oportunidad detectada: VENTA";
-  return "El mercado no muestra una oportunidad sólida ahora mismo.";
-}
-
-function badgeFromAction(action: Action) {
-  if (action === "BUY") return { text: "🟢 Señal de compra", dot: "#22c55e" };
-  if (action === "SELL") return { text: "🔴 Señal de venta", dot: "#ef4444" };
-  return { text: "🟡 Sin señal clara", dot: "#facc15" };
-}
-
-function actionBg(action: Action) {
-  // Fondo sutil por acción (sin destruir el diseño)
-  if (action === "BUY") return "radial-gradient(900px 480px at 15% 10%, rgba(34,197,94,.22), rgba(2,6,23,0) 60%)";
-  if (action === "SELL") return "radial-gradient(900px 480px at 15% 10%, rgba(239,68,68,.20), rgba(2,6,23,0) 60%)";
-  return "radial-gradient(900px 480px at 15% 10%, rgba(250,204,21,.16), rgba(2,6,23,0) 60%)";
-}
-
-function CandlesSVG({ candles }: { candles: Candle[] }) {
-  // SVG simple y rápido (sin librerías)
-  const w = 980;
+function CandleChart({ candles }: { candles: Candle[] }) {
+  const w = 900;
   const h = 260;
-  const padX = 14;
-  const padY = 14;
+  const pad = 16;
+  const plotW = w - pad * 2;
+  const plotH = h - pad * 2;
 
-  const xs = candles.map((_, i) => i);
-  const lows = candles.map((c) => c.l);
-  const highs = candles.map((c) => c.h);
+  const ys = useMemo(() => candles.flatMap((c) => [c.h, c.l]), [candles]);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
 
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...lows);
-  const maxY = Math.max(...highs);
+  const xStep = plotW / Math.max(1, candles.length);
+  const candleW = Math.max(3, Math.min(10, xStep * 0.55));
 
-  const scaleX = (x: number) => {
-    if (maxX === minX) return padX;
-    return padX + ((x - minX) / (maxX - minX)) * (w - padX * 2);
+  const y = (v: number) => {
+    if (maxY === minY) return pad + plotH / 2;
+    const t = (v - minY) / (maxY - minY);
+    return pad + (1 - t) * plotH;
   };
 
-  const scaleY = (y: number) => {
-    if (maxY === minY) return h / 2;
-    // invertir y
-    return padY + (1 - (y - minY) / (maxY - minY)) * (h - padY * 2);
-  };
-
-  const bodyW = Math.max(3, Math.min(10, (w - padX * 2) / Math.max(1, candles.length) * 0.6));
-
-  // grid horizontal
-  const gridLines = 5;
-  const grid = Array.from({ length: gridLines }, (_, i) => {
-    const y = padY + (i / (gridLines - 1)) * (h - padY * 2);
-    return (
-      <line
-        key={i}
-        x1={padX}
-        x2={w - padX}
-        y1={y}
-        y2={y}
-        stroke="rgba(255,255,255,0.06)"
-        strokeWidth="1"
-      />
-    );
-  });
+  // grid lines
+  const grid = 4;
+  const gridYs = Array.from({ length: grid + 1 }, (_, i) => pad + (plotH * i) / grid);
 
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
+    <div
       style={{
-        width: "100%",
-        height: "100%",
-        display: "block",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,.08)",
+        background: "rgba(0,0,0,.20)",
+        padding: 14,
+        overflow: "hidden",
       }}
     >
-      {grid}
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        width="100%"
+        height="260"
+        style={{ display: "block" }}
+      >
+        {/* grid */}
+        {gridYs.map((gy, i) => (
+          <line
+            key={i}
+            x1={pad}
+            x2={w - pad}
+            y1={gy}
+            y2={gy}
+            stroke="rgba(255,255,255,.06)"
+            strokeWidth="1"
+          />
+        ))}
 
-      {candles.map((c, i) => {
-        const x = scaleX(i);
-        const yH = scaleY(c.h);
-        const yL = scaleY(c.l);
-        const yO = scaleY(c.o);
-        const yC = scaleY(c.c);
+        {/* candles */}
+        {candles.map((c, i) => {
+          const cx = pad + i * xStep + xStep / 2;
+          const up = c.c >= c.o;
+          const bodyTop = y(Math.max(c.o, c.c));
+          const bodyBot = y(Math.min(c.o, c.c));
+          const wickTop = y(c.h);
+          const wickBot = y(c.l);
 
-        const up = c.c >= c.o;
-        const color = up ? "#22c55e" : "#ef4444";
-        const wick = "rgba(255,255,255,0.25)";
+          const bodyH = Math.max(2, bodyBot - bodyTop);
+          const fill = up ? "rgba(34,197,94,0.95)" : "rgba(239,68,68,0.95)";
+          const wick = up ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)";
 
-        const top = Math.min(yO, yC);
-        const bot = Math.max(yO, yC);
-        const bodyH = Math.max(2, bot - top);
-
-        return (
-          <g key={c.t}>
-            {/* wick */}
-            <line
-              x1={x}
-              x2={x}
-              y1={yH}
-              y2={yL}
-              stroke={wick}
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-            {/* body */}
-            <rect
-              x={x - bodyW / 2}
-              y={top}
-              width={bodyW}
-              height={bodyH}
-              rx={2}
-              fill={color}
-              opacity={0.9}
-            />
-          </g>
-        );
-      })}
-    </svg>
+          return (
+            <g key={c.t}>
+              <line
+                x1={cx}
+                x2={cx}
+                y1={wickTop}
+                y2={wickBot}
+                stroke={wick}
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <rect
+                x={cx - candleW / 2}
+                y={bodyTop}
+                width={candleW}
+                height={bodyH}
+                rx="2"
+                fill={fill}
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
 export default function Home() {
   const [signal, setSignal] = useState<SignalPayload | null>(null);
-  const [status, setStatus] = useState<Status>("loading");
-
   const [candles, setCandles] = useState<Candle[]>([]);
-  const [cStatus, setCStatus] = useState<Status>("loading");
-  const [cError, setCError] = useState<string>("");
+  const [status, setStatus] = useState<Status>("loading");
+  const [candleErr, setCandleErr] = useState<string>("");
 
-  async function loadSignal() {
+  const DEPLOY_MARKER = "DEPLOY-2026-02-09-A"; // cambia esto si quieres verificar despliegue
+
+  async function loadAll() {
     try {
       setStatus("loading");
-      const s = await fetchJSON(`/api/signal?v=${Date.now()}`);
-      setSignal(s?.lastSignal ?? null);
+
+      const s = await fetchJSON(`/api/signal?v=${crypto.randomUUID()}`);
+      const last = (s?.lastSignal ?? null) as SignalPayload | null;
+      setSignal(last);
+
+      try {
+        const c = await fetchJSON(`/api/candles?limit=72&v=${crypto.randomUUID()}`);
+        const list = (c?.candles ?? []) as Candle[];
+        if (!Array.isArray(list) || list.length < 10) {
+          throw new Error("No llegaron velas suficientes desde /api/candles");
+        }
+        setCandles(list);
+        setCandleErr("");
+      } catch (e: any) {
+        setCandles([]);
+        setCandleErr(e?.message ?? "No se pudieron cargar las velas.");
+      }
+
       setStatus("ok");
     } catch {
       setStatus("error");
     }
   }
 
-  async function loadCandles(limit = 72) {
-    try {
-      setCStatus("loading");
-      setCError("");
-      const c = await fetchJSON(`/api/candles?limit=${limit}&v=${Date.now()}`);
-      const arr: Candle[] = Array.isArray(c?.candles) ? c.candles : [];
-      if (arr.length < 20) throw new Error("No llegaron velas suficientes");
-      setCandles(arr);
-      setCStatus("ok");
-    } catch (e: any) {
-      setCStatus("error");
-      setCError(e?.message || "candles_error");
-      setCandles([]);
-    }
-  }
-
   useEffect(() => {
-    loadSignal();
-    loadCandles(72);
-    const id = setInterval(() => {
-      loadSignal();
-      loadCandles(72);
-    }, 60_000);
+    loadAll();
+    const id = setInterval(loadAll, 60_000);
     return () => clearInterval(id);
   }, []);
 
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
   const action: Action = signal?.action ?? "NONE";
+
   const badge = badgeFromAction(action);
 
-  const bg = useMemo(() => actionBg(action), [action]);
+  // background por señal
+  const bg =
+    action === "BUY"
+      ? "radial-gradient(1200px 500px at 20% 0%, rgba(34,197,94,.20), transparent 65%), #0b0f19"
+      : action === "SELL"
+      ? "radial-gradient(1200px 500px at 20% 0%, rgba(239,68,68,.18), transparent 65%), #0b0f19"
+      : "radial-gradient(1200px 500px at 20% 0%, rgba(250,204,21,.14), transparent 65%), #0b0f19";
+
+  const cardBg =
+    "linear-gradient(180deg, rgba(15,23,42,.92), rgba(2,6,23,.92))";
+
+  const updatedAt = signal?.at
+    ? new Date(signal.at).toLocaleString()
+    : "—";
 
   return (
     <main
-     {/* ✅ DEPLOY MARKER (si no ves esto, Vercel no está desplegando tu commit) */}
-<div
-  style={{
-    position: "fixed",
-    bottom: 12,
-    right: 12,
-    zIndex: 9999,
-    padding: "10px 12px",
-    borderRadius: 12,
-    background: "#111827",
-    border: "1px solid #f59e0b",
-    color: "#f59e0b",
-    fontWeight: 900,
-    letterSpacing: 0.4,
-    fontSize: 12,
-  }}
->
-  DEPLOY MARKER: 2026-02-08-HDR-2LINES
-</div>
-
+      style={{
+        minHeight: "100vh",
+        padding: 18,
+        background: bg,
+        color: "#e5e7eb",
+        fontFamily: "system-ui",
+      }}
+    >
+      {/* DEPLOY MARKER REAL (NO comentario) */}
+      <div
         style={{
           position: "fixed",
-          inset: 0,
-          pointerEvents: "none",
-          background: bg,
-          filter: "blur(6px)",
+          bottom: 10,
+          left: 10,
+          fontSize: 11,
+          opacity: 0.55,
+          letterSpacing: 0.4,
+          padding: "6px 10px",
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,.10)",
+          background: "rgba(0,0,0,.25)",
+          zIndex: 99,
+          userSelect: "none",
         }}
-      />
+      >
+        {DEPLOY_MARKER}
+      </div>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative" }}>
-        {/* HEADER: 2 líneas, centrado SIEMPRE */}
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        {/* HEADER 2 líneas CENTRADO (móvil/iPad) */}
         <header style={{ textAlign: "center", marginBottom: 18 }}>
           <div
             style={{
               fontWeight: 950,
-              letterSpacing: 0.5,
-              fontSize: "clamp(22px, 4vw, 36px)",
+              fontSize: 34,
               lineHeight: 1.05,
+              letterSpacing: 0.5,
               color: "#fbbf24",
-              textShadow: "0 10px 30px rgba(0,0,0,.55)",
+              textTransform: "uppercase",
             }}
           >
             ₿ BTCALERT
@@ -267,104 +254,74 @@ export default function Home() {
             style={{
               marginTop: 6,
               fontWeight: 900,
-              letterSpacing: 1.5,
-              textTransform: "uppercase",
-              fontSize: "clamp(12px, 2.2vw, 18px)",
+              fontSize: 22,
               lineHeight: 1.1,
+              letterSpacing: 1,
               color: "#fbbf24", // MISMO DORADO
-              opacity: 0.92,
-              textShadow: "0 10px 30px rgba(0,0,0,.55)",
+              textTransform: "uppercase",
             }}
           >
             MONITOREO Y ALERTA DE INVERSION
           </div>
         </header>
 
-        {status === "loading" && <p style={{ opacity: 0.8 }}>Cargando datos…</p>}
-        {status === "error" && <p style={{ color: "#f87171" }}>Error cargando señal.</p>}
+        {status === "loading" && <p>Cargando datos...</p>}
+        {status === "error" && <p>Error cargando señal.</p>}
 
         {signal && (
-          <section
+          <div
             style={{
-              borderRadius: 24,
-              padding: 26,
-              background: "rgba(2,6,23,.72)",
-              border: "1px solid rgba(148,163,184,.18)",
-              boxShadow: "0 30px 80px rgba(0,0,0,.45)",
-              backdropFilter: "blur(10px)",
+              borderRadius: 22,
+              padding: 22,
+              background: cardBg,
+              border: "1px solid rgba(255,255,255,.08)",
+              boxShadow: "0 20px 80px rgba(0,0,0,.55)",
             }}
           >
             {/* top row */}
             <div
               style={{
                 display: "flex",
+                alignItems: "flex-start",
                 justifyContent: "space-between",
                 gap: 14,
-                alignItems: "flex-start",
-                flexWrap: "wrap",
+                marginBottom: 14,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background: badge.dot,
-                    boxShadow: `0 0 22px ${badge.dot}`,
-                    display: "inline-block",
-                  }}
-                />
-                <div style={{ fontWeight: 900, fontSize: 20, color: "#fbbf24" }}>
-                  {badge.text.replace("🟡 ", "").replace("🟢 ", "").replace("🔴 ", "")}
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 18, color: badge.color }}>
+                  {badge.dot} {badge.title}
+                </div>
+                <div style={{ opacity: 0.72, marginTop: 6 }}>
+                  El mercado no muestra una oportunidad sólida ahora mismo.
                 </div>
               </div>
 
-              <div style={{ textAlign: "right", opacity: 0.8, fontWeight: 700 }}>
-                <div>Última actualización</div>
-                <div>
-                  {new Date(signal.at).toLocaleString("en-US", {
-                    year: "numeric",
-                    month: "numeric",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                </div>
+              <div style={{ textAlign: "right", opacity: 0.75 }}>
+                <div style={{ fontWeight: 700 }}>Última actualización</div>
+                <div style={{ fontWeight: 800 }}>{updatedAt}</div>
               </div>
             </div>
 
-            <div style={{ marginTop: 10, opacity: 0.75 }}>{subtitleFromAction(action)}</div>
-
             {/* price */}
-            <div
-              style={{
-                marginTop: 18,
-                fontSize: "clamp(38px, 5.5vw, 70px)",
-                fontWeight: 950,
-                letterSpacing: 0.2,
-                textShadow: "0 18px 60px rgba(0,0,0,.55)",
-              }}
-            >
+            <div style={{ fontSize: 54, fontWeight: 950, marginTop: 10 }}>
               {formatUSD(signal.price)}
             </div>
 
             {/* score */}
             <div style={{ marginTop: 18 }}>
-              <div style={{ opacity: 0.75, marginBottom: 6 }}>Score</div>
-              <div style={{ fontWeight: 950, fontSize: 34 }}>
+              <div style={{ opacity: 0.7 }}>Score</div>
+              <div style={{ fontSize: 30, fontWeight: 950 }}>
                 {signal.score}/100
               </div>
 
               <div
                 style={{
-                  marginTop: 10,
                   height: 12,
                   borderRadius: 999,
                   background: "rgba(255,255,255,.08)",
                   overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,.08)",
+                  marginTop: 10,
                 }}
               >
                 <div
@@ -372,92 +329,101 @@ export default function Home() {
                     height: "100%",
                     width: `${scoreBar}%`,
                     background:
-                      scoreBar >= 80 ? "#22c55e" : scoreBar >= 50 ? "#fbbf24" : "#ef4444",
+                      scoreBar >= 75
+                        ? "rgba(34,197,94,.95)"
+                        : scoreBar >= 50
+                        ? "rgba(250,204,21,.95)"
+                        : "rgba(239,68,68,.95)",
                   }}
                 />
               </div>
             </div>
 
-            {/* metrics row */}
+            {/* indicadores */}
             <div
               style={{
                 marginTop: 22,
                 display: "grid",
                 gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: 22,
+                gap: 16,
               }}
             >
               <div>
-                <div style={{ opacity: 0.65 }}>RSI (14)</div>
-                <div style={{ fontWeight: 950, fontSize: 28 }}>{signal.rsi14.toFixed(2)}</div>
-                <div style={{ marginTop: 4, opacity: 0.7 }}>
-                  1h: {formatPct(signal.change1h)} · 24h: {formatPct(signal.change24h)}
+                <div style={{ opacity: 0.7 }}>RSI (14)</div>
+                <div style={{ fontWeight: 950, fontSize: 26 }}>
+                  {signal.rsi14.toFixed(2)}
+                </div>
+                <div style={{ opacity: 0.55, marginTop: 4, fontSize: 13 }}>
+                  {/* si tienes 1h/24h lo puedes conectar luego */}
+                  1h: — • 24h: —
                 </div>
               </div>
 
               <div>
-                <div style={{ opacity: 0.65 }}>EMA 50</div>
-                <div style={{ fontWeight: 950, fontSize: 28 }}>{formatUSD(signal.ema50)}</div>
+                <div style={{ opacity: 0.7 }}>EMA 50</div>
+                <div style={{ fontWeight: 950, fontSize: 26 }}>
+                  {formatUSD(signal.ema50)}
+                </div>
               </div>
 
               <div>
-                <div style={{ opacity: 0.65 }}>EMA 200</div>
-                <div style={{ fontWeight: 950, fontSize: 28 }}>{formatUSD(signal.ema200)}</div>
+                <div style={{ opacity: 0.7 }}>EMA 200</div>
+                <div style={{ fontWeight: 950, fontSize: 26 }}>
+                  {formatUSD(signal.ema200)}
+                </div>
               </div>
 
               <div style={{ textAlign: "right" }}>
-                <div style={{ opacity: 0.65 }}>Rebote 2h</div>
-                <div style={{ fontWeight: 950, fontSize: 28 }}>
-                  {typeof signal.rebound2h === "number" ? formatPct(signal.rebound2h) : "—"}
+                <div style={{ opacity: 0.7 }}>Rebote 2h</div>
+                <div style={{ fontWeight: 950, fontSize: 26 }}>
+                  {/* si luego conectas bounce2h desde /api/signal */}
+                  0.00%
                 </div>
               </div>
             </div>
 
-            {/* candles */}
+            {/* velas */}
             <div style={{ marginTop: 22 }}>
-              <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10, opacity: 0.9 }}>
                 Gráfico de velas (últimas 72 horas)
               </div>
 
-              <div
-                style={{
-                  height: 310,
-                  borderRadius: 18,
-                  background: "rgba(0,0,0,.20)",
-                  border: "1px solid rgba(255,255,255,.10)",
-                  overflow: "hidden",
-                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)",
-                }}
-              >
-                {cStatus === "loading" && (
-                  <div style={{ padding: 14, opacity: 0.8 }}>Cargando velas…</div>
-                )}
-
-                {cStatus === "error" && (
-                  <div style={{ padding: 14, color: "#f87171" }}>
-                    No se pudieron cargar las velas desde <b>/api/candles</b>.
-                    <div style={{ marginTop: 6, opacity: 0.9 }}>Detalle: {cError}</div>
+              {candleErr ? (
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,.10)",
+                    background: "rgba(0,0,0,.18)",
+                    color: "#fca5a5",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                    No se pudieron cargar las velas desde /api/candles.
                   </div>
-                )}
-
-                {cStatus === "ok" && candles.length > 0 && (
-                  <div style={{ width: "100%", height: "100%", padding: 10 }}>
-                    <CandlesSVG candles={candles} />
-                  </div>
-                )}
-              </div>
+                  <div style={{ opacity: 0.9 }}>Detalle: {candleErr}</div>
+                </div>
+              ) : candles.length ? (
+                <CandleChart candles={candles} />
+              ) : (
+                <div style={{ opacity: 0.7 }}>Cargando velas...</div>
+              )}
             </div>
 
-            {/* responsive tweak */}
-            <style>{`
-              @media (max-width: 900px) {
-                section { padding: 18px !important; }
-              }
-              @media (max-width: 820px) {
-                .metrics4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-              }
-            `}</style>
-          </section>
+            {/* headline solo si BUY/SELL */}
+            {action !== "NONE" && (
+              <div
+                style={{
+                  marginTop: 18,
+                  fontWeight: 950,
+                  fontSize: 18,
+                  color: badge.color,
+                }}
+              >
+                {headlineFromAction(action)}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </main>
