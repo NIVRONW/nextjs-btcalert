@@ -314,16 +314,18 @@ export default function Home() {
 
         {signal && (
           <div
-            style={{
-              borderRadius: 22,
-              padding: 22,
-              background:
-                "linear-gradient(145deg, rgba(10,16,30,0.92), rgba(5,10,20,0.92))",
-              border: "1px solid rgba(255,255,255,0.08)",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
-              backdropFilter: "blur(6px)",
-            }}
-          >
+  style={{
+    borderRadius: 24,
+    padding: 24,
+    background:
+      "linear-gradient(160deg, rgba(10,18,35,0.95), rgba(5,10,20,0.98))",
+    border: "1px solid rgba(255,255,255,0.06)",
+    boxShadow:
+      "0 25px 80px rgba(0,0,0,0.65), inset 0 0 0 1px rgba(245,179,1,0.06)",
+    backdropFilter: "blur(8px)",
+    position: "relative",
+  }}
+>
             {/* top row */}
             <div
               style={{
