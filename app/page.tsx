@@ -60,7 +60,6 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
   ctx.clearRect(0, 0, W, H);
 
-  // fondo transparente (el contenedor ya tiene el look)
   if (!candles?.length) return;
 
   const padL = 18;
@@ -211,10 +210,8 @@ export default function Home() {
   const updatedAt = signal?.at ? new Date(signal.at).toLocaleString() : "—";
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
-  // colores cine
   const gold = "#f5b301";
   const bg = useMemo(() => {
-    // atmósfera similar a tu imagen final: viñeta + flare dorado arriba
     return {
       backgroundColor: "#05070e",
       backgroundImage: `
@@ -248,7 +245,7 @@ export default function Home() {
       <div
         style={{
           position: "absolute",
-          top: 72,
+          top: 88,
           left: "50%",
           transform: "translateX(-50%)",
           width: "78%",
@@ -260,21 +257,36 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* HEADER — 1 línea como la imagen final */}
+        {/* ✅ HEADER — AHORA CENTRADO EN 2 LINEAS */}
         <header style={{ marginBottom: 26 }}>
-          <div
-            style={{
-              textAlign: "left",
-              fontWeight: 900,
-              letterSpacing: 0.8,
-              fontSize: 34,
-              lineHeight: 1.1,
-              textTransform: "uppercase",
-              textShadow: "0 0 26px rgba(245,179,1,0.18)",
-            }}
-          >
-            <span style={{ color: gold }}>₿ BTCALERT</span>{" "}
-            <span style={{ color: "rgba(255,255,255,0.85)", fontWeight: 900 }}>– MONITOREO Y ALERTA DE INVERSION</span>
+          <div style={{ textAlign: "center" }}>
+            <div
+              style={{
+                fontWeight: 950,
+                letterSpacing: 1,
+                fontSize: 40,
+                lineHeight: 1.05,
+                textTransform: "uppercase",
+                textShadow: "0 0 26px rgba(245,179,1,0.18)",
+                color: gold,
+              }}
+            >
+              ₿ BTCALERT
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                fontWeight: 950,
+                letterSpacing: 1,
+                fontSize: 30, // ✅ subtítulo más grande
+                lineHeight: 1.1,
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.88)",
+              }}
+            >
+              MONITOREO Y ALERTA DE INVERSION
+            </div>
           </div>
         </header>
 
@@ -296,7 +308,7 @@ export default function Home() {
               overflow: "hidden",
             }}
           >
-            {/* glow inferior dorado como en la imagen */}
+            {/* glow inferior dorado */}
             <div
               style={{
                 position: "absolute",
@@ -304,13 +316,12 @@ export default function Home() {
                 right: 0,
                 bottom: -120,
                 height: 240,
-                background:
-                  "radial-gradient(700px 180px at 50% 0%, rgba(245,179,1,0.22), rgba(0,0,0,0) 70%)",
+                background: "radial-gradient(700px 180px at 50% 0%, rgba(245,179,1,0.22), rgba(0,0,0,0) 70%)",
                 pointerEvents: "none",
               }}
             />
 
-            {/* layout principal (izq + panel derecho) */}
+            {/* ✅ SOLO TOP: IZQ + DERECHA */}
             <div
               className="cine-grid"
               style={{
@@ -335,34 +346,36 @@ export default function Home() {
                   }}
                 >
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <span
                         style={{
                           display: "inline-block",
-                          width: 11,
-                          height: 11,
+                          width: 12,
+                          height: 12,
                           borderRadius: 999,
                           background: gold,
                           boxShadow: "0 0 14px rgba(245,179,1,0.55)",
                         }}
                       />
-                      <div style={{ fontWeight: 900, fontSize: 18, color: gold }}>
+                      {/* ✅ Indicador MÁS GRANDE */}
+                      <div style={{ fontWeight: 950, fontSize: 24, color: gold }}>
                         Sin señal clara
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 10, opacity: 0.72, fontSize: 14.5, maxWidth: 560 }}>
+                    {/* ✅ descripción MÁS GRANDE */}
+                    <div style={{ marginTop: 10, opacity: 0.78, fontSize: 18, maxWidth: 700 }}>
                       El mercado no muestra una oportunidad sólida ahora mismo.
                     </div>
                   </div>
 
-                  <div style={{ textAlign: "right", opacity: 0.72, fontWeight: 700, fontSize: 13.5 }}>
+                  <div style={{ textAlign: "right", opacity: 0.72, fontWeight: 800, fontSize: 13.5 }}>
                     <div>Última actualización</div>
                     <div style={{ marginTop: 2 }}>{updatedAt}</div>
                   </div>
                 </div>
 
-                {/* precio grande dorado/crema como en la imagen */}
+                {/* precio */}
                 <div
                   style={{
                     fontSize: 70,
@@ -405,7 +418,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* métricas fila */}
+                {/* métricas */}
                 <div
                   style={{
                     marginTop: 20,
@@ -422,13 +435,9 @@ export default function Home() {
                     </div>
                     <div style={{ opacity: 0.55, marginTop: 6, fontSize: 12.5 }}>
                       1h:{" "}
-                      {signal.change1h != null
-                        ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%`
-                        : "—"}{" "}
+                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"}{" "}
                       • 24h:{" "}
-                      {signal.change24h != null
-                        ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%`
-                        : "—"}
+                      {signal.change24h != null ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%` : "—"}
                     </div>
                   </div>
 
@@ -449,68 +458,13 @@ export default function Home() {
                   <div style={{ textAlign: "right" }}>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>Rebote 2h</div>
                     <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {signal.bounce2h != null
-                        ? `${signal.bounce2h > 0 ? "+" : ""}${signal.bounce2h.toFixed(2)}%`
-                        : "0.00%"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* velas */}
-                <div style={{ marginTop: 18 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 10, color: gold }}>
-                    Gráfico de velas (últimas 72 horas)
-                  </div>
-
-                  <div
-                    style={{
-                      borderRadius: 20,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background:
-                        "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
-                      padding: 14,
-                      boxShadow:
-                        "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -90px 140px rgba(0,0,0,0.35)",
-                    }}
-                  >
-                    {candlesStatus === "loading" && (
-                      <div style={{ opacity: 0.75 }}>Cargando velas...</div>
-                    )}
-
-                    {candlesStatus === "error" && (
-                      <div style={{ color: "#fca5a5" }}>
-                        No se pudieron cargar las velas desde <b>/api/candles</b>.
-                        <div style={{ marginTop: 6, opacity: 0.85 }}>Detalle: {candlesError}</div>
-                      </div>
-                    )}
-
-                    {/* marco interior como “pantalla” */}
-                    <div
-                      style={{
-                        width: "100%",
-                        height: 270,
-                        borderRadius: 16,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(3,6,12,0.55)",
-                        boxShadow:
-                          "inset 0 0 0 1px rgba(255,255,255,0.03), inset 0 -80px 160px rgba(0,0,0,0.55)",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <canvas
-                        ref={canvasRef}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          display: "block",
-                        }}
-                      />
+                      {signal.bounce2h != null ? `${signal.bounce2h > 0 ? "+" : ""}${signal.bounce2h.toFixed(2)}%` : "0.00%"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* DERECHA */}
+              {/* DERECHA (alineada perfecta) */}
               <aside
                 className="cine-right"
                 style={{
@@ -519,10 +473,10 @@ export default function Home() {
                   alignItems: "flex-end",
                   justifyContent: "flex-start",
                   gap: 14,
-                  paddingTop: 22,
+                  paddingTop: 18,
                 }}
               >
-                <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 700, fontSize: 13 }}>
+                <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13 }}>
                   Developed by
                 </div>
 
@@ -532,6 +486,7 @@ export default function Home() {
                     maxWidth: "100%",
                     display: "flex",
                     justifyContent: "flex-end",
+                    marginTop: 2,
                   }}
                 >
                   <Image
@@ -548,18 +503,65 @@ export default function Home() {
                   />
                 </div>
 
-                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 700, fontSize: 13, marginTop: 6 }}>
+                <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 6 }}>
                   Powered by
                 </div>
 
-                <div style={{ textAlign: "right", fontWeight: 900, letterSpacing: 0.6 }}>
+                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.6 }}>
                   CHATGPT
                 </div>
 
-                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 700, fontSize: 12 }}>
+                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 800, fontSize: 12 }}>
                   OpenAI
                 </div>
               </aside>
+            </div>
+
+            {/* ✅ AHORA EL GRAFICO VA FULL WIDTH (DE IZQ A DER) */}
+            <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
+              <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
+                Gráfico de velas (últimas 72 horas)
+              </div>
+
+              <div
+                style={{
+                  borderRadius: 20,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
+                  padding: 14,
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -90px 140px rgba(0,0,0,0.35)",
+                }}
+              >
+                {candlesStatus === "loading" && <div style={{ opacity: 0.75 }}>Cargando velas...</div>}
+
+                {candlesStatus === "error" && (
+                  <div style={{ color: "#fca5a5" }}>
+                    No se pudieron cargar las velas desde <b>/api/candles</b>.
+                    <div style={{ marginTop: 6, opacity: 0.85 }}>Detalle: {candlesError}</div>
+                  </div>
+                )}
+
+                <div
+                  style={{
+                    width: "100%",
+                    height: 320,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(3,6,12,0.55)",
+                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03), inset 0 -80px 160px rgba(0,0,0,0.55)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <canvas
+                    ref={canvasRef}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      display: "block",
+                    }}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* responsive */}
