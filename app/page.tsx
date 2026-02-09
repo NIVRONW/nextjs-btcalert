@@ -136,9 +136,22 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    drawCandles(canvasRef.current, candles);
-  }, [candles]);
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const draw = () => drawCandles(canvas, candles);
+
+  // pequeño delay para asegurar layout correcto en producción
+  const id = setTimeout(draw, 50);
+
+  window.addEventListener("resize", draw);
+
+  return () => {
+    clearTimeout(id);
+    window.removeEventListener("resize", draw);
+  };
+}, [candles]);
+
 
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
   const updatedAt = signal?.at
