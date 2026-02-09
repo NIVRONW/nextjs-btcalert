@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Action = "BUY" | "SELL" | "NONE";
 type Status = "loading" | "ok" | "error";
+type Action = "BUY" | "SELL" | "NONE";
 
 type SignalPayload = {
   at: number;
@@ -17,7 +17,6 @@ type SignalPayload = {
   change1h?: number;
   change24h?: number;
   rebound2h?: number;
-  reason?: string[];
 };
 
 type Candle = { t: number; o: number; h: number; l: number; c: number };
@@ -34,18 +33,10 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function fmtPct(n?: number) {
+function formatPct(n?: number) {
   if (typeof n !== "number" || !Number.isFinite(n)) return "—";
   const sign = n > 0 ? "+" : "";
   return `${sign}${n.toFixed(2)}%`;
-}
-
-function formatDT(ms: number) {
-  try {
-    return new Date(ms).toLocaleString();
-  } catch {
-    return "";
-  }
 }
 
 async function fetchJSON(url: string) {
@@ -55,125 +46,138 @@ async function fetchJSON(url: string) {
   return JSON.parse(text);
 }
 
-function bgFromAction(action: Action) {
-  if (action === "BUY") return "radial-gradient(1200px 600px at 50% -10%, rgba(34,197,94,.18), rgba(11,15,25,1) 55%)";
-  if (action === "SELL") return "radial-gradient(1200px 600px at 50% -10%, rgba(239,68,68,.18), rgba(11,15,25,1) 55%)";
-  return "radial-gradient(1200px 600px at 50% -10%, rgba(245,158,11,.14), rgba(11,15,25,1) 55%)";
+function subtitleFromAction(action: Action) {
+  if (action === "BUY") return "Oportunidad detectada: COMPRA";
+  if (action === "SELL") return "Oportunidad detectada: VENTA";
+  return "El mercado no muestra una oportunidad sólida ahora mismo.";
 }
 
-function titleRow(action: Action) {
-  if (action === "BUY") return { dot: "🟢", title: "ES BUENA OPORTUNIDAD PARA COMPRAR" };
-  if (action === "SELL") return { dot: "🔴", title: "ES BUENA OPORTUNIDAD PARA VENDER" };
-  return { dot: "🟡", title: "Sin señal clara" };
+function badgeFromAction(action: Action) {
+  if (action === "BUY") return { text: "🟢 Señal de compra", dot: "#22c55e" };
+  if (action === "SELL") return { text: "🔴 Señal de venta", dot: "#ef4444" };
+  return { text: "🟡 Sin señal clara", dot: "#facc15" };
 }
 
-function CandleChart({ candles }: { candles: Candle[] }) {
-  // SVG simple, sin librerías
-  const W = 920;
-  const H = 260;
-  const PAD_X = 18;
-  const PAD_Y = 18;
+function actionBg(action: Action) {
+  // Fondo sutil por acción (sin destruir el diseño)
+  if (action === "BUY") return "radial-gradient(900px 480px at 15% 10%, rgba(34,197,94,.22), rgba(2,6,23,0) 60%)";
+  if (action === "SELL") return "radial-gradient(900px 480px at 15% 10%, rgba(239,68,68,.20), rgba(2,6,23,0) 60%)";
+  return "radial-gradient(900px 480px at 15% 10%, rgba(250,204,21,.16), rgba(2,6,23,0) 60%)";
+}
 
-  const data = candles ?? [];
-  if (!data.length) return null;
+function CandlesSVG({ candles }: { candles: Candle[] }) {
+  // SVG simple y rápido (sin librerías)
+  const w = 980;
+  const h = 260;
+  const padX = 14;
+  const padY = 14;
 
-  const minL = Math.min(...data.map((d) => d.l));
-  const maxH = Math.max(...data.map((d) => d.h));
-  const range = Math.max(1e-9, maxH - minL);
+  const xs = candles.map((_, i) => i);
+  const lows = candles.map((c) => c.l);
+  const highs = candles.map((c) => c.h);
 
-  const xStep = (W - PAD_X * 2) / Math.max(1, data.length - 1);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...lows);
+  const maxY = Math.max(...highs);
 
-  const y = (price: number) =>
-    PAD_Y + (1 - (price - minL) / range) * (H - PAD_Y * 2);
+  const scaleX = (x: number) => {
+    if (maxX === minX) return padX;
+    return padX + ((x - minX) / (maxX - minX)) * (w - padX * 2);
+  };
 
-  const bodyW = Math.max(3, Math.min(10, xStep * 0.55));
+  const scaleY = (y: number) => {
+    if (maxY === minY) return h / 2;
+    // invertir y
+    return padY + (1 - (y - minY) / (maxY - minY)) * (h - padY * 2);
+  };
 
-  // grid lines
-  const grid = Array.from({ length: 5 }).map((_, i) => {
-    const yy = PAD_Y + (i / 4) * (H - PAD_Y * 2);
+  const bodyW = Math.max(3, Math.min(10, (w - padX * 2) / Math.max(1, candles.length) * 0.6));
+
+  // grid horizontal
+  const gridLines = 5;
+  const grid = Array.from({ length: gridLines }, (_, i) => {
+    const y = padY + (i / (gridLines - 1)) * (h - padY * 2);
     return (
       <line
         key={i}
-        x1={PAD_X}
-        x2={W - PAD_X}
-        y1={yy}
-        y2={yy}
+        x1={padX}
+        x2={w - padX}
+        y1={y}
+        y2={y}
         stroke="rgba(255,255,255,0.06)"
         strokeWidth="1"
       />
     );
   });
 
-  const bars = data.map((d, i) => {
-    const cx = PAD_X + i * xStep;
-    const yO = y(d.o);
-    const yC = y(d.c);
-    const yH = y(d.h);
-    const yL = y(d.l);
-
-    const up = d.c >= d.o;
-    const color = up ? "#22c55e" : "#ef4444";
-    const top = Math.min(yO, yC);
-    const bot = Math.max(yO, yC);
-    const hBody = Math.max(2, bot - top);
-
-    return (
-      <g key={i}>
-        {/* wick */}
-        <line x1={cx} x2={cx} y1={yH} y2={yL} stroke="rgba(255,255,255,0.30)" strokeWidth="1" />
-        {/* body */}
-        <rect
-          x={cx - bodyW / 2}
-          y={top}
-          width={bodyW}
-          height={hBody}
-          rx="1.5"
-          fill={color}
-          opacity="0.95"
-        />
-      </g>
-    );
-  });
-
   return (
-    <div
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
       style={{
-        marginTop: 12,
-        borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(0,0,0,0.18)",
-        padding: 12,
-        overflow: "hidden",
+        width: "100%",
+        height: "100%",
+        display: "block",
       }}
     >
-      <div style={{ width: "100%", overflowX: "auto" }}>
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          style={{
-            width: "100%",
-            height: 240,
-            display: "block",
-          }}
-        >
-          {grid}
-          {bars}
-        </svg>
-      </div>
-    </div>
+      {grid}
+
+      {candles.map((c, i) => {
+        const x = scaleX(i);
+        const yH = scaleY(c.h);
+        const yL = scaleY(c.l);
+        const yO = scaleY(c.o);
+        const yC = scaleY(c.c);
+
+        const up = c.c >= c.o;
+        const color = up ? "#22c55e" : "#ef4444";
+        const wick = "rgba(255,255,255,0.25)";
+
+        const top = Math.min(yO, yC);
+        const bot = Math.max(yO, yC);
+        const bodyH = Math.max(2, bot - top);
+
+        return (
+          <g key={c.t}>
+            {/* wick */}
+            <line
+              x1={x}
+              x2={x}
+              y1={yH}
+              y2={yL}
+              stroke={wick}
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            {/* body */}
+            <rect
+              x={x - bodyW / 2}
+              y={top}
+              width={bodyW}
+              height={bodyH}
+              rx={2}
+              fill={color}
+              opacity={0.9}
+            />
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
-export default function Page() {
+export default function Home() {
   const [signal, setSignal] = useState<SignalPayload | null>(null);
-  const [candles, setCandles] = useState<Candle[]>([]);
   const [status, setStatus] = useState<Status>("loading");
-  const [candlesStatus, setCandlesStatus] = useState<Status>("loading");
-  const [candlesError, setCandlesError] = useState<string>("");
+
+  const [candles, setCandles] = useState<Candle[]>([]);
+  const [cStatus, setCStatus] = useState<Status>("loading");
+  const [cError, setCError] = useState<string>("");
 
   async function loadSignal() {
     try {
       setStatus("loading");
-      const s = await fetchJSON("/api/signal");
+      const s = await fetchJSON(`/api/signal?v=${Date.now()}`);
       setSignal(s?.lastSignal ?? null);
       setStatus("ok");
     } catch {
@@ -181,140 +185,156 @@ export default function Page() {
     }
   }
 
-  async function loadCandles() {
+  async function loadCandles(limit = 72) {
     try {
-      setCandlesStatus("loading");
-      setCandlesError("");
-      const c = await fetchJSON("/api/candles?limit=72");
-      const arr = (c?.candles ?? []) as Candle[];
-      if (!Array.isArray(arr) || arr.length < 10) {
-        throw new Error("No llegaron velas suficientes desde /api/candles");
-      }
+      setCStatus("loading");
+      setCError("");
+      const c = await fetchJSON(`/api/candles?limit=${limit}&v=${Date.now()}`);
+      const arr: Candle[] = Array.isArray(c?.candles) ? c.candles : [];
+      if (arr.length < 20) throw new Error("No llegaron velas suficientes");
       setCandles(arr);
-      setCandlesStatus("ok");
+      setCStatus("ok");
     } catch (e: any) {
+      setCStatus("error");
+      setCError(e?.message || "candles_error");
       setCandles([]);
-      setCandlesStatus("error");
-      setCandlesError(e?.message || "Error cargando velas");
     }
   }
 
   useEffect(() => {
     loadSignal();
-    loadCandles();
-
+    loadCandles(72);
     const id = setInterval(() => {
       loadSignal();
-      loadCandles();
+      loadCandles(72);
     }, 60_000);
-
     return () => clearInterval(id);
   }, []);
 
+  const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
   const action: Action = signal?.action ?? "NONE";
-  const row = titleRow(action);
+  const badge = badgeFromAction(action);
 
-  const score = signal?.score ?? 0;
-  const scoreBar = clamp(score, 0, 100);
-
-  const gold = "#f5b301"; // dorado fuerte para el header
-  const softText = "rgba(255,255,255,0.68)";
+  const bg = useMemo(() => actionBg(action), [action]);
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        padding: 16,
-        background: bgFromAction(action),
+        padding: 18,
+        background: "#050914",
         color: "#e5e7eb",
-        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial",
+        fontFamily: "system-ui",
       }}
     >
-      <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-        {/* HEADER NUEVO: 2 líneas centradas */}
+      {/* glow */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          background: bg,
+          filter: "blur(6px)",
+        }}
+      />
+
+      <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative" }}>
+        {/* HEADER: 2 líneas, centrado SIEMPRE */}
         <header style={{ textAlign: "center", marginBottom: 18 }}>
           <div
             style={{
-              display: "inline-flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 4,
+              fontWeight: 950,
+              letterSpacing: 0.5,
+              fontSize: "clamp(22px, 4vw, 36px)",
+              lineHeight: 1.05,
+              color: "#fbbf24",
+              textShadow: "0 10px 30px rgba(0,0,0,.55)",
             }}
           >
-            <div
-              style={{
-                fontSize: 30,
-                fontWeight: 900,
-                letterSpacing: 0.5,
-                color: gold,
-                textShadow: "0 10px 30px rgba(0,0,0,.35)",
-              }}
-            >
-              ₿ BTCALERT
-            </div>
-
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                color: gold, // 👈 MISMO DORADO (ya no gris)
-                opacity: 0.95,
-              }}
-            >
-              MONITOREO Y ALERTA DE INVERSION
-            </div>
+            ₿ BTCALERT
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontWeight: 900,
+              letterSpacing: 1.5,
+              textTransform: "uppercase",
+              fontSize: "clamp(12px, 2.2vw, 18px)",
+              lineHeight: 1.1,
+              color: "#fbbf24", // MISMO DORADO
+              opacity: 0.92,
+              textShadow: "0 10px 30px rgba(0,0,0,.55)",
+            }}
+          >
+            MONITOREO Y ALERTA DE INVERSION
           </div>
         </header>
 
-        {/* estados */}
-        {status === "loading" && <p style={{ opacity: 0.8 }}>Cargando datos...</p>}
+        {status === "loading" && <p style={{ opacity: 0.8 }}>Cargando datos…</p>}
         {status === "error" && <p style={{ color: "#f87171" }}>Error cargando señal.</p>}
 
         {signal && (
           <section
             style={{
-              borderRadius: 26,
-              padding: 22,
-              background: "rgba(15,23,42,0.70)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "0 18px 50px rgba(0,0,0,0.35)",
-              backdropFilter: "blur(8px)",
+              borderRadius: 24,
+              padding: 26,
+              background: "rgba(2,6,23,.72)",
+              border: "1px solid rgba(148,163,184,.18)",
+              boxShadow: "0 30px 80px rgba(0,0,0,.45)",
+              backdropFilter: "blur(10px)",
             }}
           >
-            {/* header tarjeta */}
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 14 }}>{row.dot}</span>
-                  <div style={{ fontWeight: 900, fontSize: 18, color: gold }}>
-                    {row.title}
-                  </div>
-                </div>
-                <div style={{ marginTop: 8, color: softText, fontSize: 13 }}>
-                  {action === "NONE"
-                    ? "El mercado no muestra una oportunidad sólida ahora mismo."
-                    : "Se detectó una señal relevante según los indicadores."}
+            {/* top row */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 14,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: badge.dot,
+                    boxShadow: `0 0 22px ${badge.dot}`,
+                    display: "inline-block",
+                  }}
+                />
+                <div style={{ fontWeight: 900, fontSize: 20, color: "#fbbf24" }}>
+                  {badge.text.replace("🟡 ", "").replace("🟢 ", "").replace("🔴 ", "")}
                 </div>
               </div>
 
-              <div style={{ textAlign: "right", color: "rgba(255,255,255,0.65)", fontSize: 12 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Última actualización</div>
-                <div style={{ fontWeight: 800, color: "rgba(255,255,255,0.75)" }}>
-                  {formatDT(signal.at)}
+              <div style={{ textAlign: "right", opacity: 0.8, fontWeight: 700 }}>
+                <div>Última actualización</div>
+                <div>
+                  {new Date(signal.at).toLocaleString("en-US", {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
                 </div>
               </div>
             </div>
 
-            {/* precio */}
+            <div style={{ marginTop: 10, opacity: 0.75 }}>{subtitleFromAction(action)}</div>
+
+            {/* price */}
             <div
               style={{
                 marginTop: 18,
-                fontSize: 64,
+                fontSize: "clamp(38px, 5.5vw, 70px)",
                 fontWeight: 950,
-                letterSpacing: -0.5,
-                lineHeight: 1.05,
+                letterSpacing: 0.2,
+                textShadow: "0 18px 60px rgba(0,0,0,.55)",
               }}
             >
               {formatUSD(signal.price)}
@@ -322,18 +342,19 @@ export default function Page() {
 
             {/* score */}
             <div style={{ marginTop: 18 }}>
-              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.65)" }}>Score</div>
-              <div style={{ fontSize: 30, fontWeight: 950, marginTop: 2 }}>
+              <div style={{ opacity: 0.75, marginBottom: 6 }}>Score</div>
+              <div style={{ fontWeight: 950, fontSize: 34 }}>
                 {signal.score}/100
               </div>
 
               <div
                 style={{
-                  height: 10,
                   marginTop: 10,
+                  height: 12,
                   borderRadius: 999,
-                  background: "rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,.08)",
                   overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,.08)",
                 }}
               >
                 <div
@@ -341,99 +362,93 @@ export default function Page() {
                     height: "100%",
                     width: `${scoreBar}%`,
                     background:
-                      scoreBar >= 75 ? "#22c55e" : scoreBar >= 50 ? "#fbbf24" : "#ef4444",
+                      scoreBar >= 80 ? "#22c55e" : scoreBar >= 50 ? "#fbbf24" : "#ef4444",
                   }}
                 />
               </div>
             </div>
 
-            {/* métricas */}
+            {/* metrics row */}
             <div
               style={{
-                marginTop: 18,
+                marginTop: 22,
                 display: "grid",
                 gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: 14,
+                gap: 22,
               }}
             >
               <div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>RSI (14)</div>
-                <div style={{ fontSize: 26, fontWeight: 900, marginTop: 3 }}>
-                  {signal.rsi14.toFixed(2)}
-                </div>
-                <div style={{ marginTop: 4, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
-                  1h: {fmtPct(signal.change1h)} · 24h: {fmtPct(signal.change24h)}
+                <div style={{ opacity: 0.65 }}>RSI (14)</div>
+                <div style={{ fontWeight: 950, fontSize: 28 }}>{signal.rsi14.toFixed(2)}</div>
+                <div style={{ marginTop: 4, opacity: 0.7 }}>
+                  1h: {formatPct(signal.change1h)} · 24h: {formatPct(signal.change24h)}
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>EMA 50</div>
-                <div style={{ fontSize: 26, fontWeight: 900, marginTop: 3 }}>
-                  {formatUSD(signal.ema50)}
-                </div>
+                <div style={{ opacity: 0.65 }}>EMA 50</div>
+                <div style={{ fontWeight: 950, fontSize: 28 }}>{formatUSD(signal.ema50)}</div>
               </div>
 
               <div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>EMA 200</div>
-                <div style={{ fontSize: 26, fontWeight: 900, marginTop: 3 }}>
-                  {formatUSD(signal.ema200)}
-                </div>
+                <div style={{ opacity: 0.65 }}>EMA 200</div>
+                <div style={{ fontWeight: 950, fontSize: 28 }}>{formatUSD(signal.ema200)}</div>
               </div>
 
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Rebote 2h</div>
-                <div style={{ fontSize: 26, fontWeight: 900, marginTop: 3 }}>
-                  {fmtPct(signal.rebound2h)}
+                <div style={{ opacity: 0.65 }}>Rebote 2h</div>
+                <div style={{ fontWeight: 950, fontSize: 28 }}>
+                  {typeof signal.rebound2h === "number" ? formatPct(signal.rebound2h) : "—"}
                 </div>
               </div>
             </div>
 
-            {/* velas */}
-            <div style={{ marginTop: 18 }}>
-              <div style={{ fontWeight: 900, color: "rgba(255,255,255,0.80)" }}>
+            {/* candles */}
+            <div style={{ marginTop: 22 }}>
+              <div style={{ fontWeight: 900, opacity: 0.85, marginBottom: 10 }}>
                 Gráfico de velas (últimas 72 horas)
               </div>
 
-              {candlesStatus === "loading" && (
-                <div style={{ marginTop: 10, color: "rgba(255,255,255,0.6)" }}>
-                  Cargando velas...
-                </div>
-              )}
+              <div
+                style={{
+                  height: 310,
+                  borderRadius: 18,
+                  background: "rgba(0,0,0,.20)",
+                  border: "1px solid rgba(255,255,255,.10)",
+                  overflow: "hidden",
+                  boxShadow: "inset 0 0 0 1px rgba(255,255,255,.04)",
+                }}
+              >
+                {cStatus === "loading" && (
+                  <div style={{ padding: 14, opacity: 0.8 }}>Cargando velas…</div>
+                )}
 
-              {candlesStatus === "error" && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 12,
-                    borderRadius: 14,
-                    border: "1px solid rgba(239,68,68,0.35)",
-                    background: "rgba(239,68,68,0.08)",
-                    color: "#fca5a5",
-                    fontSize: 13,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  No se pudieron cargar las velas desde /api/candles.
-                  {"\n"}Detalle: {candlesError}
-                </div>
-              )}
+                {cStatus === "error" && (
+                  <div style={{ padding: 14, color: "#f87171" }}>
+                    No se pudieron cargar las velas desde <b>/api/candles</b>.
+                    <div style={{ marginTop: 6, opacity: 0.9 }}>Detalle: {cError}</div>
+                  </div>
+                )}
 
-              {candlesStatus === "ok" && <CandleChart candles={candles} />}
+                {cStatus === "ok" && candles.length > 0 && (
+                  <div style={{ width: "100%", height: "100%", padding: 10 }}>
+                    <CandlesSVG candles={candles} />
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* responsive tweak */}
+            <style>{`
+              @media (max-width: 900px) {
+                section { padding: 18px !important; }
+              }
+              @media (max-width: 820px) {
+                .metrics4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+              }
+            `}</style>
           </section>
         )}
-
-        {/* responsive: en móvil, bajamos tamaño del header */}
-        <style jsx global>{`
-          @media (max-width: 720px) {
-            header div:first-child > div:first-child {
-              font-size: 24px !important;
-            }
-            header div:first-child > div:last-child {
-              font-size: 14px !important;
-            }
-          }
-        `}</style>
       </div>
     </main>
   );
