@@ -219,16 +219,26 @@ export default function Home() {
 
   return (
     <main
-      style={{
-        minHeight: "100vh",
-        padding: 18,
-        background: "#050914",
-        color: "#e5e7eb",
-        fontFamily: "system-ui",
-      }}
-    >
-      {/* glow */}
-      <div
+     {/* ✅ DEPLOY MARKER (si no ves esto, Vercel no está desplegando tu commit) */}
+<div
+  style={{
+    position: "fixed",
+    bottom: 12,
+    right: 12,
+    zIndex: 9999,
+    padding: "10px 12px",
+    borderRadius: 12,
+    background: "#111827",
+    border: "1px solid #f59e0b",
+    color: "#f59e0b",
+    fontWeight: 900,
+    letterSpacing: 0.4,
+    fontSize: 12,
+  }}
+>
+  DEPLOY MARKER: 2026-02-08-HDR-2LINES
+</div>
+
         style={{
           position: "fixed",
           inset: 0,
