@@ -252,18 +252,25 @@ export default function Home() {
               </div>
             </div>
 
-            <div style={{ marginTop: 20 }}>
-              <canvas
-                ref={canvasRef}
-                style={{
-                  width: "100%",
-                  height: 240,
-                }}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+            <div
+  style={{
+    marginTop: 20,
+    width: "100%",
+    height: 240,
+    position: "relative",
+  }}
+>
+  <canvas
+    ref={canvasRef}
+    style={{
+      width: "100%",
+      height: "100%",
+      display: "block",
+      borderRadius: 16,
+      background: "rgba(0,0,0,0.25)",
+    }}
+  />
+</div>
 
       <style jsx global>{`
         .title-main {
