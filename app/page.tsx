@@ -300,6 +300,44 @@ export default function Home() {
           </div>
         </header>
 
+        {/* GOLD GLOW / TOP BAR (estilo premium) */}
+<div
+  style={{
+    position: "relative",
+    height: 26,
+    marginBottom: 10,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  {/* línea dorada */}
+  <div
+    style={{
+      width: "72%",
+      height: 2,
+      borderRadius: 999,
+      background: "linear-gradient(90deg, rgba(245,179,1,0), rgba(245,179,1,0.95), rgba(245,179,1,0))",
+      boxShadow: "0 0 22px rgba(245,179,1,0.35)",
+    }}
+  />
+  {/* brillo superior suave */}
+  <div
+    style={{
+      position: "absolute",
+      top: -26,
+      left: "50%",
+      transform: "translateX(-50%)",
+      width: "72%",
+      height: 70,
+      background:
+        "radial-gradient(closest-side, rgba(245,179,1,0.28), rgba(245,179,1,0) 70%)",
+      filter: "blur(2px)",
+      pointerEvents: "none",
+    }}
+  />
+</div>
+
         {status === "loading" && <p>Cargando datos...</p>}
         {status === "error" && <p style={{ color: "#f87171" }}>Error cargando señal.</p>}
 
