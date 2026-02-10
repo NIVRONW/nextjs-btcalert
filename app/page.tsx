@@ -515,7 +515,7 @@ export default function Home() {
                 {/* ✅ EMPUJE VISUAL DEL LOGO (por aire transparente del PNG) */}
                 <div
                   style={{
-                    width: 260,
+                    width: 300,
                     display: "flex",
                     justifyContent: "flex-end",
                   }}
