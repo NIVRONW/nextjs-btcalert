@@ -119,7 +119,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V6";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V7";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -233,9 +233,9 @@ export default function Home() {
 
   const rightW = 260;
 
-  // ✅ Ajusta SOLO las letras para alinearlas al borde "real" del logo (por el padding/transparencia del PNG)
-  // Si lo quieres un pelín más a la derecha: 36. Más a la izquierda: 24.
-  const LOGO_TEXT_INSET = 32;
+  // ✅ MÁS A LA DERECHA (por el padding/transparencia del PNG)
+  // Si todavía falta: sube a 84 / 92. Si se pasa: baja a 64.
+  const LOGO_TEXT_INSET = 72;
 
   return (
     <main style={{ minHeight: "100vh", ...bg, color: "#e5e7eb", fontFamily: "system-ui" }}>
@@ -482,7 +482,7 @@ export default function Home() {
                   paddingTop: 24,
                 }}
               >
-                {/* ✅ Letras alineadas al borde REAL del logo (no al cuadro del PNG) */}
+                {/* ✅ Letras movidas a la derecha */}
                 <div style={{ paddingLeft: LOGO_TEXT_INSET, width: "100%" }}>
                   <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
                 </div>
@@ -511,7 +511,7 @@ export default function Home() {
               </aside>
             </div>
 
-            {/* GRAFICO FULL WIDTH */}
+            {/* GRAFICO */}
             <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
               <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
                 Gráfico de velas (últimas 72 horas)
@@ -546,14 +546,7 @@ export default function Home() {
                     overflow: "hidden",
                   }}
                 >
-                  <canvas
-                    ref={canvasRef}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "block",
-                    }}
-                  />
+                  <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
                 </div>
               </div>
             </div>
