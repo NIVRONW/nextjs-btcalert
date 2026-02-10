@@ -209,6 +209,7 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
+    // ✅ MÁS SENSIBLE PARA PRINCIPIANTE (ANTES: 75)
     const VERY_GOOD_SCORE = 60;
 
     const buyVerdict =
