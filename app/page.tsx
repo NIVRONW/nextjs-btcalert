@@ -48,6 +48,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const cssW = canvas.clientWidth;
   const cssH = canvas.clientHeight;
+
   if (!cssW || !cssH) return;
 
   canvas.width = Math.floor(cssW * dpr);
@@ -56,8 +57,8 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
   const W = cssW;
   const H = cssH;
-  ctx.clearRect(0, 0, W, H);
 
+  ctx.clearRect(0, 0, W, H);
   if (!candles?.length) return;
 
   const padL = 18;
@@ -81,7 +82,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
   const yOf = (p: number) => padT + (maxP - p) * (innerH / span);
 
-  // grid suave
+  // grid suave (cinematic)
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(255,255,255,0.06)";
   const lines = 4;
@@ -123,8 +124,8 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  // 🔥 cambia este texto si quieres confirmar en producción que sí cambió
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V2";
+  // marcador para verificar deployment
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V3";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -135,7 +136,6 @@ export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // confirmación BUY (si quieres mantenerla)
   const BUY_MIN_SCORE = 80;
 
   async function loadSignal() {
@@ -191,6 +191,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // dibujar velas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -206,33 +207,33 @@ export default function Home() {
   const updatedAt = signal?.at ? new Date(signal.at).toLocaleString() : "—";
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
-  const gold = "#f5b301";
-  const green = "#22c55e";
-  const red = "#ef4444";
+  // 🎨 Colores automáticos por señal
+  const theme = useMemo(() => {
+    const gold = "#f5b301";
+    const green = "#22c55e";
+    const red = "#ef4444";
 
-  const action: Action = signal?.action ?? "NONE";
+    const action = signal?.action ?? "NONE";
 
-  const actionUI = useMemo(() => {
-    if (action === "BUY") {
-      return {
-        dot: green,
-        title: "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢",
-        desc: "Se detectó una condición favorable para compra.",
-      };
-    }
-    if (action === "SELL") {
-      return {
-        dot: red,
-        title: "🔴 ES BUENA OPORTUNIDAD PARA VENDER 🔴",
-        desc: "Se detectó una condición favorable para venta.",
-      };
-    }
-    return {
-      dot: gold,
-      title: "Sin señal clara",
-      desc: "El mercado no muestra una oportunidad sólida ahora mismo.",
-    };
-  }, [action, gold, green, red]);
+    const accent =
+      action === "BUY" ? green : action === "SELL" ? red : gold;
+
+    const label =
+      action === "BUY"
+        ? "Oportunidad de COMPRA"
+        : action === "SELL"
+        ? "Oportunidad de VENTA"
+        : "Sin señal clara";
+
+    const desc =
+      action === "BUY"
+        ? "Condiciones favorables detectadas para comprar."
+        : action === "SELL"
+        ? "Condiciones favorables detectadas para vender."
+        : "El mercado no muestra una oportunidad sólida ahora mismo.";
+
+    return { gold, green, red, accent, label, desc, action };
+  }, [signal?.action]);
 
   const bg = useMemo(() => {
     return {
@@ -280,35 +281,32 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* HEADER */}
+        {/* HEADER — tamaños invertidos (subtítulo más grande) */}
         <header style={{ marginBottom: 26 }}>
           <div style={{ textAlign: "center" }}>
-            {/* BTCALERT más pequeño */}
             <div
               style={{
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 24,
+                fontSize: 22, // ⬅️ BTCALERT más pequeño
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 textShadow: "0 0 26px rgba(245,179,1,0.18)",
-                color: gold,
+                color: theme.gold,
               }}
             >
               ₿ BTCALERT
             </div>
 
-            {/* MONITOREO... más grande */}
             <div
               style={{
                 marginTop: 10,
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 40,
-                lineHeight: 1.08,
+                fontSize: 36, // ⬅️ MONITOREO más grande
+                lineHeight: 1.1,
                 textTransform: "uppercase",
                 color: "rgba(255,255,255,0.90)",
-                textShadow: "0 0 22px rgba(0,0,0,0.55)",
               }}
             >
               MONITOREO Y ALERTA DE INVERSION
@@ -347,7 +345,7 @@ export default function Home() {
               }}
             />
 
-            {/* TOP GRID */}
+            {/* TOP: IZQ + DERECHA */}
             <div
               className="cine-grid"
               style={{
@@ -359,8 +357,9 @@ export default function Home() {
                 zIndex: 1,
               }}
             >
-              {/* LEFT */}
+              {/* IZQUIERDA */}
               <div>
+                {/* top row */}
                 <div
                   style={{
                     display: "flex",
@@ -371,25 +370,32 @@ export default function Home() {
                   }}
                 >
                   <div>
-                    {/* ✅ Indicador grande + punto pequeño (NO círculo gigante) */}
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {/* ✅ SOLO 1 PUNTO (sin círculo amarillo extra) + color automático */}
                       <span
                         style={{
                           display: "inline-block",
-                          width: 10,
-                          height: 10,
+                          width: 12,
+                          height: 12,
                           borderRadius: 999,
-                          background: actionUI.dot,
-                          boxShadow: `0 0 14px ${action === "BUY" ? "rgba(34,197,94,0.55)" : action === "SELL" ? "rgba(239,68,68,0.45)" : "rgba(245,179,1,0.55)"}`,
+                          background: theme.accent,
+                          boxShadow: `0 0 14px ${theme.action === "BUY"
+                            ? "rgba(34,197,94,0.45)"
+                            : theme.action === "SELL"
+                            ? "rgba(239,68,68,0.45)"
+                            : "rgba(245,179,1,0.55)"
+                          }`,
                         }}
                       />
-                      <div style={{ fontWeight: 950, fontSize: 24, color: actionUI.dot }}>
-                        {actionUI.title}
+                      {/* ✅ Indicador MÁS GRANDE + color automático */}
+                      <div style={{ fontWeight: 950, fontSize: 26, color: theme.accent }}>
+                        {theme.label}
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 10, opacity: 0.82, fontSize: 18, maxWidth: 760 }}>
-                      {actionUI.desc}
+                    {/* ✅ descripción MÁS GRANDE */}
+                    <div style={{ marginTop: 10, opacity: 0.82, fontSize: 18.5, maxWidth: 760 }}>
+                      {theme.desc}
                     </div>
                   </div>
 
@@ -435,13 +441,8 @@ export default function Home() {
                       style={{
                         height: "100%",
                         width: `${scoreBar}%`,
-                        background: action === "BUY" ? green : action === "SELL" ? red : "#ef4444",
-                        boxShadow:
-                          action === "BUY"
-                            ? "0 0 18px rgba(34,197,94,0.20)"
-                            : action === "SELL"
-                            ? "0 0 18px rgba(239,68,68,0.18)"
-                            : "0 0 18px rgba(239,68,68,0.18)",
+                        background: "#ef4444",
+                        boxShadow: "0 0 18px rgba(239,68,68,0.18)",
                       }}
                     />
                   </div>
@@ -493,7 +494,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* RIGHT */}
+              {/* DERECHA (flush right REAL) */}
               <aside
                 className="cine-right"
                 style={{
@@ -504,41 +505,35 @@ export default function Home() {
                   gap: 14,
                   paddingTop: 18,
                   justifySelf: "end",
+                  marginRight: -2, // micro-ajuste del bloque a la derecha
                 }}
               >
                 <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13 }}>
                   Developed by
                 </div>
 
-                {/* ✅ wrapper 100% y alineado al borde derecho */}
+                {/* ✅ EMPUJE VISUAL DEL LOGO (por aire transparente del PNG) */}
                 <div
                   style={{
-                    width: "100%",
+                    width: 260,
                     display: "flex",
                     justifyContent: "flex-end",
-                    alignItems: "flex-end",
                   }}
                 >
-                  <div
-  style={{
-    width: 260,
-    display: "flex",
-    justifyContent: "flex-end",
-  }}
->
-  <Image
-    src="/ndigital.png"
-    alt="N Digital"
-    width={400}
-    height={400}
-    priority
-    style={{
-      width: "100%",
-      height: "auto",
-      display: "block",
-    }}
-  />
-</div>
+                  <Image
+                    src="/ndigital.png"
+                    alt="N Digital"
+                    width={260}
+                    height={260}
+                    priority
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      display: "block",
+                      marginRight: -18, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
+                      filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
+                    }}
+                  />
                 </div>
 
                 <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 6 }}>
@@ -555,9 +550,9 @@ export default function Home() {
               </aside>
             </div>
 
-            {/* candles full width */}
+            {/* GRAFICO FULL WIDTH */}
             <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
-              <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
+              <div style={{ fontWeight: 950, marginBottom: 10, color: theme.gold, fontSize: 18 }}>
                 Gráfico de velas (últimas 72 horas)
               </div>
 
@@ -602,6 +597,7 @@ export default function Home() {
               </div>
             </div>
 
+            {/* responsive */}
             <style jsx>{`
               @media (max-width: 980px) {
                 .cine-grid {
@@ -610,7 +606,7 @@ export default function Home() {
                 .cine-right {
                   align-items: flex-start !important;
                   padding-top: 10px !important;
-                  justify-self: start !important;
+                  margin-right: 0 !important;
                 }
               }
               @media (max-width: 760px) {
