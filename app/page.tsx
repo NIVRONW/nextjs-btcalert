@@ -352,7 +352,7 @@ export default function Home() {
               className="cine-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.65fr 0.75fr",
+                gridTemplateColumns: "1fr auto",
                 gap: 22,
                 alignItems: "start",
                 position: "relative",
@@ -503,7 +503,7 @@ export default function Home() {
                   justifyContent: "flex-start",
                   gap: 14,
                   paddingTop: 18,
-                  justifySelf: "end", // ✅ empuja todo al borde derecho del grid
+                  justifySelf: "end",
                 }}
               >
                 <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13 }}>
@@ -520,28 +520,25 @@ export default function Home() {
                   }}
                 >
                   <div
-                    style={{
-                      width: 260,
-                      maxWidth: "100%",
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      marginLeft: "auto", // ✅ pega a la derecha aunque haya espacio
-                    }}
-                  >
-                    <Image
-                      src="/ndigital.png"
-                      alt="N Digital"
-                      width={260}
-                      height={260}
-                      priority
-                      style={{
-                        width: "100%",
-                        height: "auto",
-                        display: "block",
-                        filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
-                      }}
-                    />
-                  </div>
+  style={{
+    width: 260,
+    display: "flex",
+    justifyContent: "flex-end",
+  }}
+>
+  <Image
+    src="/ndigital.png"
+    alt="N Digital"
+    width={260}
+    height={260}
+    priority
+    style={{
+      width: "100%",
+      height: "auto",
+      display: "block",
+    }}
+  />
+</div>
                 </div>
 
                 <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 6 }}>
