@@ -498,60 +498,48 @@ export default function Home() {
 <aside
   className="cine-right"
   style={{
-    width: 280,                // mismo ancho para todo el bloque
+    width: 280,
     justifySelf: "end",
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",      // ⬅️ centramos el eje
-    gap: 16,
+    alignItems: "center",
+    gap: 14,
     paddingTop: 18,
+    textAlign: "center",
   }}
 >
-  {/* Developed by */}
   <div
     style={{
-      width: "100%",
-      textAlign: "right",
       fontSize: 13,
       fontWeight: 800,
       opacity: 0.65,
+      width: "100%",
     }}
   >
     Developed by
   </div>
 
-  {/* LOGO */}
-  <div
+  <Image
+    src="/ndigital.png"
+    alt="N Digital"
+    width={240}
+    height={240}
+    priority
     style={{
-      width: "100%",
-      display: "flex",
-      justifyContent: "center",   // ⬅️ centrado perfecto
+      width: 240,
+      height: "auto",
+      display: "block",
+      filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))",
     }}
-  >
-    <Image
-      src="/ndigital.png"
-      alt="N Digital"
-      width={240}
-      height={240}
-      priority
-      style={{
-        width: 240,
-        height: "auto",
-        display: "block",
-        filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))",
-      }}
-    />
-  </div>
+  />
 
-  {/* Powered by */}
   <div
     style={{
-      width: "100%",
-      textAlign: "right",
       fontSize: 13,
       fontWeight: 800,
       opacity: 0.60,
       marginTop: 6,
+      width: "100%",
     }}
   >
     Powered by
@@ -559,10 +547,9 @@ export default function Home() {
 
   <div
     style={{
-      width: "100%",
-      textAlign: "right",
       fontWeight: 950,
       letterSpacing: 0.6,
+      width: "100%",
     }}
   >
     CHATGPT
@@ -570,11 +557,10 @@ export default function Home() {
 
   <div
     style={{
-      width: "100%",
-      textAlign: "right",
       fontSize: 12,
       fontWeight: 800,
       opacity: 0.55,
+      width: "100%",
     }}
   >
     OpenAI
