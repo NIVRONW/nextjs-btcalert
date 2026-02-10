@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     const provided = getBearer(req);
 
     if (!expected || provided !== expected) {
-      return json({ ok: false, error: "Unauthorized", build: "CRON-ACTION-V2" }, 401);
+      return json({ ok: false, error: "Unauthorized", build: "CRON-ACTION-V3-SENSITIVE" }, 401);
     }
 
     const urlObj = new URL(req.url);
@@ -141,14 +141,23 @@ export async function POST(req: Request) {
     const got = await fetchHourlyBTC(240);
     if (!got.ok) {
       return json(
-        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data, build: "CRON-ACTION-V2" },
+        {
+          ok: false,
+          error: "CryptoCompare error",
+          status: got.status,
+          detail: got.data,
+          build: "CRON-ACTION-V3-SENSITIVE",
+        },
         500
       );
     }
 
     const closes = got.closes;
     if (closes.length < 210) {
-      return json({ ok: false, error: "Not enough price data", points: closes.length, build: "CRON-ACTION-V2" }, 500);
+      return json(
+        { ok: false, error: "Not enough price data", points: closes.length, build: "CRON-ACTION-V3-SENSITIVE" },
+        500
+      );
     }
 
     const price = closes[closes.length - 1];
@@ -193,10 +202,10 @@ export async function POST(req: Request) {
       if (rsi14 >= 42 && rsi14 <= 62) {
         score += 15;
         reasons.push("Impulso saludable (ni sobrecomprado ni sobrevendido)");
-      } else if (rsi14 > 62 && rsi14 <= 72) {
+      } else if (rsi14 > 62 && rsi14 <= 74) {
         score += 6;
         reasons.push("Impulso algo alto (posible sobrecompra ligera)");
-      } else if (rsi14 < 42 && rsi14 >= 35) {
+      } else if (rsi14 < 42 && rsi14 >= 34) {
         score += 6;
         reasons.push("Impulso algo bajo (posible rebote)");
       } else {
@@ -204,25 +213,24 @@ export async function POST(req: Request) {
       }
     }
 
-    if (rebound2h >= 0.30) {
+    if (rebound2h >= 0.25) {
       score += 10;
       reasons.push("Rebote reciente confirmado");
     }
 
-    // ✅ MÁS SENSIBLE PARA PRINCIPIANTE (ANTES: 75)
+    // ✅ MÁS SENSIBLE (y fácil de activar)
     const VERY_GOOD_SCORE = 60;
 
+    // ✅ CAMBIO CLAVE: antes era (price>=ema200 && ema50>=ema200) -> MUY ESTRICTO
     const buyVerdict =
       score >= VERY_GOOD_SCORE &&
-      price >= ema200 &&
-      ema50 >= ema200 &&
-      (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72));
+      (price >= ema200 || ema50 >= ema200) &&
+      (rsi14 === null || (rsi14 >= 34 && rsi14 <= 74));
 
     const sellVerdict =
       score >= VERY_GOOD_SCORE &&
-      price < ema200 &&
-      ema50 < ema200 &&
-      (rsi14 === null || rsi14 >= 55);
+      (price < ema200 || ema50 < ema200) &&
+      (rsi14 === null || rsi14 >= 50);
 
     const action: "BUY" | "SELL" | "NONE" =
       force && forcedAction ? forcedAction : buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
@@ -259,9 +267,20 @@ export async function POST(req: Request) {
 
     return json({
       ok: true,
-      build: "CRON-ACTION-V2",
+      build: "CRON-ACTION-V3-SENSITIVE",
       at: Date.now(),
+      source: "CryptoCompare",
+
+      // ✅ debug útil
       price,
+      ema50,
+      ema200,
+      rsi14,
+      rebound2h,
+      score,
+      buyVerdict,
+      sellVerdict,
+
       action,
       forcedAction,
       alert: shouldSend,
@@ -271,10 +290,9 @@ export async function POST(req: Request) {
         ok: telegram?.ok ?? false,
         status: telegram?.status ?? null,
       },
-      source: "CryptoCompare",
     });
   } catch (err: any) {
-    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-ACTION-V2" }, 500);
+    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-ACTION-V3-SENSITIVE" }, 500);
   }
 }
 
