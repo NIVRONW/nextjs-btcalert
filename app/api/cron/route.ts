@@ -150,7 +150,7 @@ export async function POST(req: Request) {
     const provided = getBearer(req);
 
     if (!expected || provided !== expected) {
-      return json({ ok: false, error: "Unauthorized", build: "CRON-KV-COOLDOWN-V1" }, 401);
+      return json({ ok: false, error: "Unauthorized", build: "CRON-SAFE-KV-V1" }, 401);
     }
 
     const urlObj = new URL(req.url);
@@ -167,14 +167,14 @@ export async function POST(req: Request) {
     const got = await fetchHourlyBTC(240);
     if (!got.ok) {
       return json(
-        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data, build: "CRON-KV-COOLDOWN-V1" },
+        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data, build: "CRON-SAFE-KV-V1" },
         500
       );
     }
 
     const closes = got.closes;
     if (closes.length < 210) {
-      return json({ ok: false, error: "Not enough price data", points: closes.length, build: "CRON-KV-COOLDOWN-V1" }, 500);
+      return json({ ok: false, error: "Not enough price data", points: closes.length, build: "CRON-SAFE-KV-V1" }, 500);
     }
 
     const price = closes[closes.length - 1];
@@ -192,9 +192,12 @@ export async function POST(req: Request) {
     const low2h = Math.min(...last3);
     const rebound2h = pct(price, low2h);
 
-    // ====== SCORE / REASONS (sensibles) ======
+    // ====== SCORE / REASONS ======
     let score = 0;
     const reasons: string[] = [];
+
+    const trendStrong = price >= ema200 && ema50 >= ema200; // ✅ filtro de seguridad BUY
+    const trendWeak = price < ema200 && ema50 < ema200;
 
     if (price >= ema200) {
       score += 30;
@@ -241,18 +244,20 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
-    const VERY_GOOD_SCORE = 60;
+    const BUY_MIN_SCORE = 60;
+    const SELL_MIN_SCORE = 55;
 
-    // BUY y SELL “B” (más señales, sin ruido loco)
+    // ✅ BUY SEGURO: SOLO EN TENDENCIA ESTRUCTURAL ALCISTA
     const buyVerdict =
-      score >= VERY_GOOD_SCORE &&
-      price >= ema50 && // estructura mínima
-      (ema50 >= ema200 || price >= ema200) &&
-      (rsi14 === null || (rsi14 >= 34 && rsi14 <= 74)) &&
+      score >= BUY_MIN_SCORE &&
+      trendStrong &&
+      price >= ema50 &&
+      (rsi14 === null || (rsi14 >= 38 && rsi14 <= 72)) &&
       rebound2h >= 0.25;
 
+    // ✅ SELL: salida por deterioro estructural (más útil cuando ya estás dentro)
     const sellVerdict =
-      score >= 55 &&
+      score >= SELL_MIN_SCORE &&
       (price < ema50 || ema50 < ema200) &&
       (rsi14 === null || rsi14 >= 50);
 
@@ -261,16 +266,11 @@ export async function POST(req: Request) {
     const now = Date.now();
 
     const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas
-
     const inCooldown = state.lastAction === "BUY" && now - state.lastAt < COOLDOWN_MS;
 
-    // emergencia: si se cae fuerte, vendemos aunque esté en cooldown
+    // ✅ Emergencia: si cae fuerte durante cooldown → SELL inmediato
     const emergencySell =
-      inCooldown &&
-      (
-        change1h <= -1.0 ||                 // caída rápida 1h
-        price < ema50 * 0.995               // rompe EMA50 con margen
-      );
+      inCooldown && (change1h <= -1.0 || price < ema50 * 0.995);
 
     let action: Action = "NONE";
 
@@ -280,9 +280,8 @@ export async function POST(req: Request) {
       action = "SELL";
       reasons.unshift("🔴 VENTA", "Salida de emergencia (caída fuerte durante cooldown)");
     } else {
-      // cooldown: evita SELL por ruido justo después de BUY
+      // cooldown: evita señales cruzadas rápidas
       if (inCooldown) {
-        // solo permitimos BUY si no venimos de BUY (no tiene sentido) y SELL solo por emergencia
         action = "NONE";
       } else {
         action = buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
@@ -305,6 +304,7 @@ export async function POST(req: Request) {
       const hora = ahora.toLocaleTimeString("en-US");
       const fecha = ahora.toLocaleDateString("en-US");
 
+      // Solo 3 motivos
       const motivos = reasons.slice(0, 3);
       const motivoTxt =
         motivos.length > 0
@@ -320,7 +320,7 @@ export async function POST(req: Request) {
 
       telegram = await sendTelegramHTML(msg);
 
-      // ✅ actualizar estado SOLO si realmente se emitió BUY/SELL
+      // ✅ Guardar estado solo si emitimos BUY/SELL
       if (action === "BUY" || action === "SELL") {
         await writeState({ lastAction: action, lastAt: now, lastPrice: price });
       }
@@ -328,11 +328,11 @@ export async function POST(req: Request) {
 
     return json({
       ok: true,
-      build: "CRON-KV-COOLDOWN-V1",
+      build: "CRON-SAFE-KV-V1",
       at: now,
       source: "CryptoCompare",
 
-      // debug útil
+      // debug
       price,
       ema50,
       ema200,
@@ -340,6 +340,8 @@ export async function POST(req: Request) {
       rebound2h,
       change1h,
       score,
+      trendStrong,
+      trendWeak,
       buyVerdict,
       sellVerdict,
       state,
@@ -357,7 +359,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err: any) {
-    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-KV-COOLDOWN-V1" }, 500);
+    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-SAFE-KV-V1" }, 500);
   }
 }
 
