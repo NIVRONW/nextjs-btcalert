@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import { kv } from "@vercel/kv";
+
 /** Respuesta JSON */
 function json(data: any, status = 200) {
   return Response.json(data, { status });
@@ -117,6 +119,30 @@ async function fetchHourlyBTC(limitHours: number) {
   return { ok: true, closes };
 }
 
+type Action = "BUY" | "SELL" | "NONE";
+
+type TradeState = {
+  lastAction: Action;
+  lastAt: number; // ms
+  lastPrice?: number;
+};
+
+const KV_KEY = "btcalert:lastTrade";
+
+async function readState(): Promise<TradeState> {
+  try {
+    const s = (await kv.get(KV_KEY)) as TradeState | null;
+    if (s && typeof s.lastAt === "number" && typeof s.lastAction === "string") return s;
+  } catch {}
+  return { lastAction: "NONE", lastAt: 0 };
+}
+
+async function writeState(state: TradeState) {
+  try {
+    await kv.set(KV_KEY, state);
+  } catch {}
+}
+
 export async function POST(req: Request) {
   try {
     // ✅ AUTH: Bearer CRON_SECRET
@@ -124,7 +150,7 @@ export async function POST(req: Request) {
     const provided = getBearer(req);
 
     if (!expected || provided !== expected) {
-      return json({ ok: false, error: "Unauthorized", build: "CRON-ACTION-V3-SENSITIVE" }, 401);
+      return json({ ok: false, error: "Unauthorized", build: "CRON-KV-COOLDOWN-V1" }, 401);
     }
 
     const urlObj = new URL(req.url);
@@ -141,23 +167,14 @@ export async function POST(req: Request) {
     const got = await fetchHourlyBTC(240);
     if (!got.ok) {
       return json(
-        {
-          ok: false,
-          error: "CryptoCompare error",
-          status: got.status,
-          detail: got.data,
-          build: "CRON-ACTION-V3-SENSITIVE",
-        },
+        { ok: false, error: "CryptoCompare error", status: got.status, detail: got.data, build: "CRON-KV-COOLDOWN-V1" },
         500
       );
     }
 
     const closes = got.closes;
     if (closes.length < 210) {
-      return json(
-        { ok: false, error: "Not enough price data", points: closes.length, build: "CRON-ACTION-V3-SENSITIVE" },
-        500
-      );
+      return json({ ok: false, error: "Not enough price data", points: closes.length, build: "CRON-KV-COOLDOWN-V1" }, 500);
     }
 
     const price = closes[closes.length - 1];
@@ -166,10 +183,16 @@ export async function POST(req: Request) {
     const ema200 = ema(closes.slice(-220), 200);
     const rsi14 = rsi(closes.slice(-60), 14);
 
+    // % cambio 1h
+    const prev1h = closes[closes.length - 2] || price;
+    const change1h = pct(price, prev1h);
+
+    // Rebote 2h (últimas 3 velas)
     const last3 = closes.slice(-3);
     const low2h = Math.min(...last3);
     const rebound2h = pct(price, low2h);
 
+    // ====== SCORE / REASONS (sensibles) ======
     let score = 0;
     const reasons: string[] = [];
 
@@ -218,22 +241,55 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
-    // ✅ MÁS SENSIBLE (y fácil de activar)
     const VERY_GOOD_SCORE = 60;
 
-    // ✅ CAMBIO CLAVE: antes era (price>=ema200 && ema50>=ema200) -> MUY ESTRICTO
+    // BUY y SELL “B” (más señales, sin ruido loco)
     const buyVerdict =
       score >= VERY_GOOD_SCORE &&
-      (price >= ema200 || ema50 >= ema200) &&
-      (rsi14 === null || (rsi14 >= 34 && rsi14 <= 74));
+      price >= ema50 && // estructura mínima
+      (ema50 >= ema200 || price >= ema200) &&
+      (rsi14 === null || (rsi14 >= 34 && rsi14 <= 74)) &&
+      rebound2h >= 0.25;
 
     const sellVerdict =
-      score >= VERY_GOOD_SCORE &&
-      (price < ema200 || ema50 < ema200) &&
+      score >= 55 &&
+      (price < ema50 || ema50 < ema200) &&
       (rsi14 === null || rsi14 >= 50);
 
-    const action: "BUY" | "SELL" | "NONE" =
-      force && forcedAction ? forcedAction : buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
+    // ====== COOLDOWN + EMERGENCY ======
+    const state = await readState();
+    const now = Date.now();
+
+    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas
+
+    const inCooldown = state.lastAction === "BUY" && now - state.lastAt < COOLDOWN_MS;
+
+    // emergencia: si se cae fuerte, vendemos aunque esté en cooldown
+    const emergencySell =
+      inCooldown &&
+      (
+        change1h <= -1.0 ||                 // caída rápida 1h
+        price < ema50 * 0.995               // rompe EMA50 con margen
+      );
+
+    let action: Action = "NONE";
+
+    if (force && forcedAction) {
+      action = forcedAction;
+    } else if (emergencySell) {
+      action = "SELL";
+      reasons.unshift("🔴 VENTA", "Salida de emergencia (caída fuerte durante cooldown)");
+    } else {
+      // cooldown: evita SELL por ruido justo después de BUY
+      if (inCooldown) {
+        // solo permitimos BUY si no venimos de BUY (no tiene sentido) y SELL solo por emergencia
+        action = "NONE";
+      } else {
+        action = buyVerdict ? "BUY" : sellVerdict ? "SELL" : "NONE";
+        if (action === "BUY") reasons.unshift("🟢 COMPRA");
+        if (action === "SELL") reasons.unshift("🔴 VENTA");
+      }
+    }
 
     const shouldSend = force || action !== "NONE";
 
@@ -263,23 +319,32 @@ export async function POST(req: Request) {
         `<b>FECHA:</b> ${escapeHTML(fecha)}`;
 
       telegram = await sendTelegramHTML(msg);
+
+      // ✅ actualizar estado SOLO si realmente se emitió BUY/SELL
+      if (action === "BUY" || action === "SELL") {
+        await writeState({ lastAction: action, lastAt: now, lastPrice: price });
+      }
     }
 
     return json({
       ok: true,
-      build: "CRON-ACTION-V3-SENSITIVE",
-      at: Date.now(),
+      build: "CRON-KV-COOLDOWN-V1",
+      at: now,
       source: "CryptoCompare",
 
-      // ✅ debug útil
+      // debug útil
       price,
       ema50,
       ema200,
       rsi14,
       rebound2h,
+      change1h,
       score,
       buyVerdict,
       sellVerdict,
+      state,
+      inCooldown,
+      emergencySell,
 
       action,
       forcedAction,
@@ -292,7 +357,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err: any) {
-    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-ACTION-V3-SENSITIVE" }, 500);
+    return json({ ok: false, error: err?.message ?? String(err), build: "CRON-KV-COOLDOWN-V1" }, 500);
   }
 }
 
