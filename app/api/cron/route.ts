@@ -209,7 +209,7 @@ export async function POST(req: Request) {
       reasons.push("Rebote reciente confirmado");
     }
 
-    const VERY_GOOD_SCORE = 75;
+    const VERY_GOOD_SCORE = 60;
 
     const buyVerdict =
       score >= VERY_GOOD_SCORE &&
