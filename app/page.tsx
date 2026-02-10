@@ -81,6 +81,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const bodyW = Math.max(2, Math.min(9, xStep * 0.62));
   const yOf = (p: number) => padT + (maxP - p) * (innerH / span);
 
+  // grid suave
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(255,255,255,0.06)";
   const lines = 4;
@@ -92,6 +93,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
     ctx.stroke();
   }
 
+  // velas
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
     const xCenter = padL + xStep * (i + 0.5);
@@ -103,12 +105,14 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
     const up = c.c >= c.o;
 
+    // wick
     ctx.strokeStyle = "rgba(255,255,255,0.22)";
     ctx.beginPath();
     ctx.moveTo(xCenter, yH);
     ctx.lineTo(xCenter, yL);
     ctx.stroke();
 
+    // body
     const yTop = Math.min(yO, yC);
     const yBot = Math.max(yO, yC);
     const h = Math.max(2, yBot - yTop);
@@ -119,7 +123,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V7";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V8";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -233,8 +237,7 @@ export default function Home() {
 
   const rightW = 260;
 
-  // ✅ MÁS A LA DERECHA (por el padding/transparencia del PNG)
-  // Si todavía falta: sube a 84 / 92. Si se pasa: baja a 64.
+  // ✅ Este fue el punto “MUCHO MEJOR”
   const LOGO_TEXT_INSET = 72;
 
   return (
@@ -355,6 +358,7 @@ export default function Home() {
                 >
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      {/* ✅ SOLO ESTE PUNTO (AUTO POR SEÑAL) */}
                       <span
                         style={{
                           display: "inline-block",
@@ -482,7 +486,7 @@ export default function Home() {
                   paddingTop: 24,
                 }}
               >
-                {/* ✅ Letras movidas a la derecha */}
+                {/* ✅ Letras alineadas al “borde real” del logo */}
                 <div style={{ paddingLeft: LOGO_TEXT_INSET, width: "100%" }}>
                   <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
                 </div>
