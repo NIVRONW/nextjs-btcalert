@@ -523,14 +523,14 @@ export default function Home() {
                   <Image
                     src="/ndigital.png"
                     alt="N Digital"
-                    width={260}
-                    height={260}
+                    width={350}
+                    height={350}
                     priority
                     style={{
                       width: "100%",
                       height: "auto",
                       display: "block",
-                      marginRight: -42, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
+                      marginRight: -50, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
                       filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
                     }}
                   />
@@ -540,7 +540,7 @@ export default function Home() {
                   Powered by
                 </div>
 
-                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.6 }}>
+                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.5 }}>
                   CHATGPT
                 </div>
 
