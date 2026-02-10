@@ -530,7 +530,7 @@ export default function Home() {
                       width: "100%",
                       height: "auto",
                       display: "block",
-                      marginRight: -32, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
+                      marginRight: -42, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
                       filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
                     }}
                   />
