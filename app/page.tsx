@@ -48,7 +48,6 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const cssW = canvas.clientWidth;
   const cssH = canvas.clientHeight;
-
   if (!cssW || !cssH) return;
 
   canvas.width = Math.floor(cssW * dpr);
@@ -83,7 +82,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
   const yOf = (p: number) => padT + (maxP - p) * (innerH / span);
 
-  // grid suave (cinematic)
+  // grid suave
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(255,255,255,0.06)";
   const lines = 4;
@@ -125,8 +124,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  // marcador para verificar deployment (debe cambiar en producción)
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-EXACT-V2";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V1";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -137,7 +135,6 @@ export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // si quieres mantener confirmación BUY, ajusta aquí
   const BUY_MIN_SCORE = 80;
 
   async function loadSignal() {
@@ -194,7 +191,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // dibujar velas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -211,6 +207,30 @@ export default function Home() {
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
   const gold = "#f5b301";
+
+  // ✅ color automático según acción
+  const action = signal?.action ?? "NONE";
+  const actionDot =
+    action === "BUY" ? "rgba(34,197,94,1)" : action === "SELL" ? "rgba(239,68,68,1)" : gold;
+  const actionGlow =
+    action === "BUY" ? "rgba(34,197,94,0.45)" : action === "SELL" ? "rgba(239,68,68,0.45)" : "rgba(245,179,1,0.55)";
+  const actionLabelColor =
+    action === "BUY" ? "rgba(34,197,94,1)" : action === "SELL" ? "rgba(239,68,68,1)" : gold;
+
+  const actionText =
+    action === "BUY"
+      ? "🟢 Señal de compra"
+      : action === "SELL"
+      ? "🔴 Señal de venta"
+      : "🟡 Sin señal clara";
+
+  const actionDesc =
+    action === "BUY"
+      ? "El mercado muestra condiciones favorables para considerar compra."
+      : action === "SELL"
+      ? "El mercado muestra condiciones para considerar salida/venta."
+      : "El mercado no muestra una oportunidad sólida ahora mismo.";
+
   const bg = useMemo(() => {
     return {
       backgroundColor: "#05070e",
@@ -226,7 +246,6 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", ...bg, color: "#e5e7eb", fontFamily: "system-ui" }}>
-      {/* marker */}
       <div
         style={{
           position: "fixed",
@@ -241,7 +260,6 @@ export default function Home() {
         {DEPLOY_MARKER}
       </div>
 
-      {/* top flare line */}
       <div
         style={{
           position: "absolute",
@@ -257,15 +275,14 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* ✅ HEADER — 2 líneas, intercambiando tamaños */}
+        {/* HEADER (tamaños invertidos como pediste) */}
         <header style={{ marginBottom: 26 }}>
           <div style={{ textAlign: "center" }}>
-            {/* BTCALERT más pequeño */}
             <div
               style={{
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 28,
+                fontSize: 22, // ✅ BTCALERT más pequeño
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 textShadow: "0 0 26px rgba(245,179,1,0.18)",
@@ -275,17 +292,16 @@ export default function Home() {
               ₿ BTCALERT
             </div>
 
-            {/* TÍTULO principal mucho más grande */}
             <div
               style={{
                 marginTop: 10,
                 fontWeight: 950,
-                letterSpacing: 1,
-                fontSize: 46,
-                lineHeight: 1.08,
+                letterSpacing: 1.2,
+                fontSize: 40, // ✅ MONITOREO más grande
+                lineHeight: 1.05,
                 textTransform: "uppercase",
                 color: "rgba(255,255,255,0.92)",
-                textShadow: "0 0 22px rgba(0,0,0,0.35)",
+                textShadow: "0 0 18px rgba(0,0,0,0.6)",
               }}
             >
               MONITOREO Y ALERTA DE INVERSION
@@ -311,7 +327,6 @@ export default function Home() {
               overflow: "hidden",
             }}
           >
-            {/* glow inferior dorado */}
             <div
               style={{
                 position: "absolute",
@@ -324,7 +339,6 @@ export default function Home() {
               }}
             />
 
-            {/* TOP: IZQ + DERECHA */}
             <div
               className="cine-grid"
               style={{
@@ -338,7 +352,6 @@ export default function Home() {
             >
               {/* IZQUIERDA */}
               <div>
-                {/* top row */}
                 <div
                   style={{
                     display: "flex",
@@ -349,43 +362,25 @@ export default function Home() {
                   }}
                 >
                   <div>
+                    {/* ✅ SOLO PUNTO PEQUEÑO (sin círculo grande) + color automático */}
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <span
                         style={{
                           display: "inline-block",
-                          width: 12,
-                          height: 12,
+                          width: 11,
+                          height: 11,
                           borderRadius: 999,
-                          background: gold,
-                          boxShadow: "0 0 14px rgba(245,179,1,0.55)",
+                          background: actionDot,
+                          boxShadow: `0 0 14px ${actionGlow}`,
                         }}
                       />
-
-                      {/* ✅ Indicador MÁS GRANDE + emoji */}
-                      <div
-                        style={{
-                          fontWeight: 950,
-                          fontSize: 32,
-                          color: gold,
-                          letterSpacing: 0.5,
-                        }}
-                      >
-                        🟡 Sin señal clara
+                      <div style={{ fontWeight: 950, fontSize: 26, color: actionLabelColor }}>
+                        {actionText}
                       </div>
                     </div>
 
-                    {/* ✅ descripción MÁS GRANDE */}
-                    <div
-                      style={{
-                        marginTop: 10,
-                        opacity: 0.82,
-                        fontSize: 20,
-                        fontWeight: 600,
-                        maxWidth: 760,
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      El mercado no muestra una oportunidad sólida ahora mismo.
+                    <div style={{ marginTop: 10, opacity: 0.80, fontSize: 18, maxWidth: 760 }}>
+                      {actionDesc}
                     </div>
                   </div>
 
@@ -395,7 +390,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* precio */}
                 <div
                   style={{
                     fontSize: 70,
@@ -412,7 +406,6 @@ export default function Home() {
                   {formatUSD(signal.price)}
                 </div>
 
-                {/* score */}
                 <div style={{ marginTop: 18 }}>
                   <div style={{ opacity: 0.68, marginBottom: 8, fontSize: 13.5 }}>Score</div>
                   <div style={{ fontSize: 34, fontWeight: 900, marginBottom: 12 }}>
@@ -438,7 +431,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* métricas */}
                 <div
                   style={{
                     marginTop: 20,
@@ -453,8 +445,8 @@ export default function Home() {
                     <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{signal.rsi14.toFixed(2)}</div>
                     <div style={{ opacity: 0.55, marginTop: 6, fontSize: 12.5 }}>
                       1h:{" "}
-                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"} •
-                      24h:{" "}
+                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"}{" "}
+                      • 24h:{" "}
                       {signal.change24h != null ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%` : "—"}
                     </div>
                   </div>
@@ -478,7 +470,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* ✅ DERECHA (alineación perfecta a la derecha) */}
+              {/* DERECHA (logo pegado a la derecha REAL) */}
               <aside
                 className="cine-right"
                 style={{
@@ -486,46 +478,50 @@ export default function Home() {
                   flexDirection: "column",
                   alignItems: "flex-end",
                   justifyContent: "flex-start",
-                  gap: 10,
-                  paddingTop: 10,
-                  textAlign: "right",
+                  gap: 14,
+                  paddingTop: 18,
+                  width: "100%",
                 }}
               >
-                <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
-
-                <div
-                  style={{
-                    width: 260,
-                    maxWidth: "100%",
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    alignItems: "flex-end",
-                    marginTop: 2,
-                  }}
-                >
-                  <Image
-                    src="/ndigital.png"
-                    alt="N Digital"
-                    width={260}
-                    height={260}
-                    priority
-                    style={{
-                      width: "100%",
-                      height: "auto",
-                      filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
-                    }}
-                  />
+                <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13, width: "100%" }}>
+                  Developed by
                 </div>
 
-                <div style={{ opacity: 0.6, fontWeight: 800, fontSize: 13, marginTop: 6 }}>Powered by</div>
+                {/* ✅ wrapper full width para que el logo se pegue al borde derecho */}
+                <div style={{ width: "100%", display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ width: 240, maxWidth: "100%", display: "flex", justifyContent: "flex-end" }}>
+                    <Image
+                      src="/ndigital.png"
+                      alt="N Digital"
+                      width={240}
+                      height={240}
+                      priority
+                      style={{
+                        width: "100%",
+                        height: "auto",
+                        display: "block",
+                        marginLeft: "auto",
+                        filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
+                      }}
+                    />
+                  </div>
+                </div>
 
-                <div style={{ fontWeight: 950, letterSpacing: 0.6 }}>CHATGPT</div>
+                <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, width: "100%", marginTop: 6 }}>
+                  Powered by
+                </div>
 
-                <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12 }}>OpenAI</div>
+                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.6, width: "100%" }}>
+                  CHATGPT
+                </div>
+
+                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 800, fontSize: 12, width: "100%" }}>
+                  OpenAI
+                </div>
               </aside>
             </div>
 
-            {/* ✅ GRAFICO FULL WIDTH */}
+            {/* velas full width */}
             <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
               <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
                 Gráfico de velas (últimas 72 horas)
@@ -560,19 +556,11 @@ export default function Home() {
                     overflow: "hidden",
                   }}
                 >
-                  <canvas
-                    ref={canvasRef}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "block",
-                    }}
-                  />
+                  <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
                 </div>
               </div>
             </div>
 
-            {/* responsive */}
             <style jsx>{`
               @media (max-width: 980px) {
                 .cine-grid {
@@ -580,7 +568,6 @@ export default function Home() {
                 }
                 .cine-right {
                   align-items: flex-start !important;
-                  text-align: left !important;
                   padding-top: 10px !important;
                 }
               }
