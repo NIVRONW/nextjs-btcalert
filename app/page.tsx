@@ -59,7 +59,6 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const H = cssH;
 
   ctx.clearRect(0, 0, W, H);
-
   if (!candles?.length) return;
 
   const padL = 18;
@@ -80,10 +79,8 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
   const xStep = innerW / Math.max(1, candles.length);
   const bodyW = Math.max(2, Math.min(9, xStep * 0.62));
-
   const yOf = (p: number) => padT + (maxP - p) * (innerH / span);
 
-  // grid suave (cinematic)
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(255,255,255,0.06)";
   const lines = 4;
@@ -95,7 +92,6 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
     ctx.stroke();
   }
 
-  // velas
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
     const xCenter = padL + xStep * (i + 0.5);
@@ -107,14 +103,12 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
     const up = c.c >= c.o;
 
-    // wick
     ctx.strokeStyle = "rgba(255,255,255,0.22)";
     ctx.beginPath();
     ctx.moveTo(xCenter, yH);
     ctx.lineTo(xCenter, yL);
     ctx.stroke();
 
-    // body
     const yTop = Math.min(yO, yC);
     const yBot = Math.max(yO, yC);
     const h = Math.max(2, yBot - yTop);
@@ -125,7 +119,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V5";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V6";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -238,6 +232,10 @@ export default function Home() {
   }, []);
 
   const rightW = 260;
+
+  // ✅ Ajusta SOLO las letras para alinearlas al borde "real" del logo (por el padding/transparencia del PNG)
+  // Si lo quieres un pelín más a la derecha: 36. Más a la izquierda: 24.
+  const LOGO_TEXT_INSET = 32;
 
   return (
     <main style={{ minHeight: "100vh", ...bg, color: "#e5e7eb", fontFamily: "system-ui" }}>
@@ -470,15 +468,12 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* DERECHA (FIX REAL):
-                  ✅ Empuja el bloque COMPLETO al borde derecho del panel: justifySelf:"end"
-                  ✅ Mantiene textos alineados al borde del logo: alignItems:"flex-start"
-              */}
+              {/* DERECHA */}
               <aside
                 className="cine-right"
                 style={{
                   width: rightW,
-                  justifySelf: "end", // ✅ ESTO es lo que lo pega a la derecha
+                  justifySelf: "end",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "flex-start",
@@ -487,7 +482,10 @@ export default function Home() {
                   paddingTop: 24,
                 }}
               >
-                <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
+                {/* ✅ Letras alineadas al borde REAL del logo (no al cuadro del PNG) */}
+                <div style={{ paddingLeft: LOGO_TEXT_INSET, width: "100%" }}>
+                  <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
+                </div>
 
                 <div style={{ width: rightW, display: "flex", justifyContent: "flex-start" }}>
                   <Image
@@ -505,9 +503,11 @@ export default function Home() {
                   />
                 </div>
 
-                <div style={{ opacity: 0.6, fontWeight: 800, fontSize: 13, marginTop: 12 }}>Powered by</div>
-                <div style={{ fontWeight: 950, letterSpacing: 0.6 }}>CHATGPT</div>
-                <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12 }}>OpenAI</div>
+                <div style={{ paddingLeft: LOGO_TEXT_INSET, width: "100%", marginTop: 10 }}>
+                  <div style={{ opacity: 0.6, fontWeight: 800, fontSize: 13 }}>Powered by</div>
+                  <div style={{ fontWeight: 950, letterSpacing: 0.6, marginTop: 6 }}>CHATGPT</div>
+                  <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12, marginTop: 6 }}>OpenAI</div>
+                </div>
               </aside>
             </div>
 
