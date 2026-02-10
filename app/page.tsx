@@ -59,6 +59,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
   const H = cssH;
 
   ctx.clearRect(0, 0, W, H);
+
   if (!candles?.length) return;
 
   const padL = 18;
@@ -124,8 +125,8 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  // marcador para verificar deployment
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V3";
+  // marcador para verificar deployment (debe cambiar en producción)
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V4";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -136,6 +137,7 @@ export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // si quieres mantener confirmación BUY, ajusta aquí
   const BUY_MIN_SCORE = 80;
 
   async function loadSignal() {
@@ -144,6 +146,7 @@ export default function Home() {
       const s = await fetchJSON("/api/signal");
       const last = (s?.lastSignal ?? null) as SignalPayload | null;
 
+      // confirmación BUY (si score < BUY_MIN_SCORE, se muestra como NONE)
       if (last && last.action === "BUY" && Number(last.score) < BUY_MIN_SCORE) {
         setSignal({ ...last, action: "NONE", verdict: false });
       } else {
@@ -169,6 +172,7 @@ export default function Home() {
       }
 
       arr.sort((a, b) => a.t - b.t);
+
       setCandles(arr);
       setCandlesStatus("ok");
     } catch (e: any) {
@@ -207,33 +211,22 @@ export default function Home() {
   const updatedAt = signal?.at ? new Date(signal.at).toLocaleString() : "—";
   const scoreBar = signal ? clamp(signal.score, 0, 100) : 0;
 
-  // 🎨 Colores automáticos por señal
-  const theme = useMemo(() => {
-    const gold = "#f5b301";
-    const green = "#22c55e";
-    const red = "#ef4444";
+  const gold = "#f5b301";
+  const green = "#22c55e";
+  const red = "#ef4444";
 
-    const action = signal?.action ?? "NONE";
+  const action: Action = signal?.action ?? "NONE";
+  const indicatorColor = action === "BUY" ? green : action === "SELL" ? red : gold;
 
-    const accent =
-      action === "BUY" ? green : action === "SELL" ? red : gold;
+  const indicatorTitle =
+    action === "BUY" ? "Señal de compra" : action === "SELL" ? "Señal de venta" : "Sin señal clara";
 
-    const label =
-      action === "BUY"
-        ? "Oportunidad de COMPRA"
-        : action === "SELL"
-        ? "Oportunidad de VENTA"
-        : "Sin señal clara";
-
-    const desc =
-      action === "BUY"
-        ? "Condiciones favorables detectadas para comprar."
-        : action === "SELL"
-        ? "Condiciones favorables detectadas para vender."
-        : "El mercado no muestra una oportunidad sólida ahora mismo.";
-
-    return { gold, green, red, accent, label, desc, action };
-  }, [signal?.action]);
+  const indicatorDesc =
+    action === "BUY"
+      ? "Condiciones favorables para comprar ahora mismo."
+      : action === "SELL"
+      ? "Condiciones favorables para vender ahora mismo."
+      : "El mercado no muestra una oportunidad sólida ahora mismo.";
 
   const bg = useMemo(() => {
     return {
@@ -247,6 +240,8 @@ export default function Home() {
       `,
     } as const;
   }, []);
+
+  const rightW = 260;
 
   return (
     <main style={{ minHeight: "100vh", ...bg, color: "#e5e7eb", fontFamily: "system-ui" }}>
@@ -281,18 +276,18 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* HEADER — tamaños invertidos (subtítulo más grande) */}
+        {/* HEADER — 2 líneas, subtítulo más grande */}
         <header style={{ marginBottom: 26 }}>
           <div style={{ textAlign: "center" }}>
             <div
               style={{
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 22, // ⬅️ BTCALERT más pequeño
+                fontSize: 22, // BTCALERT más pequeño
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 textShadow: "0 0 26px rgba(245,179,1,0.18)",
-                color: theme.gold,
+                color: gold,
               }}
             >
               ₿ BTCALERT
@@ -301,12 +296,13 @@ export default function Home() {
             <div
               style={{
                 marginTop: 10,
-                fontWeight: 950,
+                fontWeight: 980,
                 letterSpacing: 1,
-                fontSize: 36, // ⬅️ MONITOREO más grande
-                lineHeight: 1.1,
+                fontSize: 42, // MONITOREO más grande
+                lineHeight: 1.05,
                 textTransform: "uppercase",
                 color: "rgba(255,255,255,0.90)",
+                textShadow: "0 10px 30px rgba(0,0,0,0.45)",
               }}
             >
               MONITOREO Y ALERTA DE INVERSION
@@ -350,7 +346,7 @@ export default function Home() {
               className="cine-grid"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr auto",
+                gridTemplateColumns: "1.65fr 0.75fr",
                 gap: 22,
                 alignItems: "start",
                 position: "relative",
@@ -371,31 +367,31 @@ export default function Home() {
                 >
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      {/* ✅ SOLO 1 PUNTO (sin círculo amarillo extra) + color automático */}
+                      {/* ✅ DOT AUTOMÁTICO (sin círculo amarillo) */}
                       <span
                         style={{
                           display: "inline-block",
                           width: 12,
                           height: 12,
                           borderRadius: 999,
-                          background: theme.accent,
-                          boxShadow: `0 0 14px ${theme.action === "BUY"
-                            ? "rgba(34,197,94,0.45)"
-                            : theme.action === "SELL"
-                            ? "rgba(239,68,68,0.45)"
-                            : "rgba(245,179,1,0.55)"
-                          }`,
+                          background: indicatorColor,
+                          boxShadow:
+                            action === "BUY"
+                              ? "0 0 18px rgba(34,197,94,0.55)"
+                              : action === "SELL"
+                              ? "0 0 18px rgba(239,68,68,0.55)"
+                              : "0 0 18px rgba(245,179,1,0.55)",
                         }}
                       />
-                      {/* ✅ Indicador MÁS GRANDE + color automático */}
-                      <div style={{ fontWeight: 950, fontSize: 26, color: theme.accent }}>
-                        {theme.label}
+                      {/* ✅ Indicador MÁS GRANDE + COLOR AUTOMÁTICO */}
+                      <div style={{ fontWeight: 980, fontSize: 26, color: indicatorColor }}>
+                        {indicatorTitle}
                       </div>
                     </div>
 
                     {/* ✅ descripción MÁS GRANDE */}
-                    <div style={{ marginTop: 10, opacity: 0.82, fontSize: 18.5, maxWidth: 760 }}>
-                      {theme.desc}
+                    <div style={{ marginTop: 10, opacity: 0.82, fontSize: 18.5, maxWidth: 720 }}>
+                      {indicatorDesc}
                     </div>
                   </div>
 
@@ -441,7 +437,7 @@ export default function Home() {
                       style={{
                         height: "100%",
                         width: `${scoreBar}%`,
-                        background: "#ef4444",
+                        background: red,
                         boxShadow: "0 0 18px rgba(239,68,68,0.18)",
                       }}
                     />
@@ -460,118 +456,88 @@ export default function Home() {
                 >
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>RSI (14)</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {signal.rsi14.toFixed(2)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{signal.rsi14.toFixed(2)}</div>
                     <div style={{ opacity: 0.55, marginTop: 6, fontSize: 12.5 }}>
                       1h:{" "}
-                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"}{" "}
+                      {signal.change1h != null
+                        ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%`
+                        : "—"}{" "}
                       • 24h:{" "}
-                      {signal.change24h != null ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%` : "—"}
+                      {signal.change24h != null
+                        ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%`
+                        : "—"}
                     </div>
                   </div>
 
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>EMA 50</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {formatUSD(signal.ema50)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{formatUSD(signal.ema50)}</div>
                   </div>
 
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>EMA 200</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {formatUSD(signal.ema200)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{formatUSD(signal.ema200)}</div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>Rebote 2h</div>
                     <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {signal.bounce2h != null ? `${signal.bounce2h > 0 ? "+" : ""}${signal.bounce2h.toFixed(2)}%` : "0.00%"}
+                      {signal.bounce2h != null
+                        ? `${signal.bounce2h > 0 ? "+" : ""}${signal.bounce2h.toFixed(2)}%`
+                        : "0.00%"}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* DERECHA */}
-<aside
-  className="cine-right"
-  style={{
-    width: 280,
-    justifySelf: "end",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 14,
-    paddingTop: 18,
-    textAlign: "center",
-  }}
->
-  <div
-    style={{
-      fontSize: 13,
-      fontWeight: 800,
-      opacity: 0.65,
-      width: "100%",
-    }}
-  >
-    Developed by
-  </div>
+              {/* DERECHA
+                  ✅ “letras alineadas con el logo”:
+                  - el bloque completo se pega a la derecha (marginLeft:auto)
+                  - dentro del bloque TODO se alinea al mismo borde izquierdo del logo
+              */}
+              <aside
+                className="cine-right"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start", // ✅ textos alineados al borde del logo
+                  justifyContent: "flex-start",
+                  gap: 14,
+                  paddingTop: 24, // ✅ Developed by un poco más abajo (4–6px aprox)
+                  width: rightW,
+                  marginLeft: "auto", // ✅ bloque pegado a la derecha del panel
+                }}
+              >
+                <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
 
-  <Image
-    src="/ndigital.png"
-    alt="N Digital"
-    width={240}
-    height={240}
-    priority
-    style={{
-      width: 240,
-      height: "auto",
-      display: "block",
-      filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))",
-    }}
-  />
+                <div style={{ width: rightW, display: "flex", justifyContent: "flex-start" }}>
+                  <Image
+                    src="/ndigital.png"
+                    alt="N Digital"
+                    width={rightW}
+                    height={rightW}
+                    priority
+                    className="nd-logo"
+                    style={{
+                      width: "100%",
+                      height: "auto",
+                      filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
+                    }}
+                  />
+                </div>
 
-  <div
-    style={{
-      fontSize: 13,
-      fontWeight: 800,
-      opacity: 0.60,
-      marginTop: 6,
-      width: "100%",
-    }}
-  >
-    Powered by
-  </div>
+                {/* ✅ más aire entre logo y Powered by */}
+                <div style={{ opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 12 }}>Powered by</div>
 
-  <div
-    style={{
-      fontWeight: 950,
-      letterSpacing: 0.6,
-      width: "100%",
-    }}
-  >
-    CHATGPT
-  </div>
+                <div style={{ fontWeight: 950, letterSpacing: 0.6 }}>CHATGPT</div>
 
-  <div
-    style={{
-      fontSize: 12,
-      fontWeight: 800,
-      opacity: 0.55,
-      width: "100%",
-    }}
-  >
-    OpenAI
-  </div>
-</aside>
-
+                <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12 }}>OpenAI</div>
+              </aside>
             </div>
 
             {/* GRAFICO FULL WIDTH */}
             <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
-              <div style={{ fontWeight: 950, marginBottom: 10, color: theme.gold, fontSize: 18 }}>
+              <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
                 Gráfico de velas (últimas 72 horas)
               </div>
 
@@ -616,16 +582,41 @@ export default function Home() {
               </div>
             </div>
 
-            {/* responsive */}
+            {/* responsive + animación sutil */}
             <style jsx>{`
+              /* ✅ fade sutil del logo (pro) */
+              .nd-logo {
+                opacity: 0.96;
+                animation: ndFade 5.6s ease-in-out infinite;
+                will-change: opacity;
+              }
+              @keyframes ndFade {
+                0% {
+                  opacity: 0.92;
+                }
+                50% {
+                  opacity: 1;
+                }
+                100% {
+                  opacity: 0.92;
+                }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                .nd-logo {
+                  animation: none;
+                  opacity: 1;
+                }
+              }
+
               @media (max-width: 980px) {
                 .cine-grid {
                   grid-template-columns: 1fr !important;
                 }
                 .cine-right {
+                  margin-left: 0 !important;
+                  width: 100% !important;
                   align-items: flex-start !important;
                   padding-top: 10px !important;
-                  margin-right: 0 !important;
                 }
               }
               @media (max-width: 760px) {
