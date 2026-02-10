@@ -320,10 +320,10 @@ export async function POST(req: Request) {
 
       telegram = await sendTelegramHTML(msg);
 
-      // ✅ Guardar estado solo si emitimos BUY/SELL
-      if (action === "BUY" || action === "SELL") {
-        await writeState({ lastAction: action, lastAt: now, lastPrice: price });
-      }
+      // ✅ Guardar estado SOLO en señales reales (nunca en force=1)
+if (!force && (action === "BUY" || action === "SELL")) {
+  await writeState({ lastAction: action, lastAt: now, lastPrice: price });
+}
     }
 
     return json({
