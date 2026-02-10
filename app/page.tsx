@@ -529,8 +529,8 @@ export default function Home() {
   <Image
     src="/ndigital.png"
     alt="N Digital"
-    width={260}
-    height={260}
+    width={300}
+    height={300}
     priority
     style={{
       width: "100%",
