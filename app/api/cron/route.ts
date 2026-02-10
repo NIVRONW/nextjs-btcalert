@@ -360,9 +360,10 @@ if (!force && (action === "BUY" || action === "SELL")) {
       force,
       reason: reasons.slice(0, 3),
       telegram: {
-        ok: telegram?.ok ?? false,
-        status: telegram?.status ?? null,
-      },
+  ok: telegram?.ok ?? false,
+  status: telegram?.status ?? null,
+  data: telegram?.data ?? null, // ✅ para ver el error exacto
+},
     });
   } catch (err: any) {
     return json({ ok: false, error: err?.message ?? String(err), build: "CRON-SAFE-KV-V1" }, 500);
