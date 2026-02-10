@@ -498,14 +498,13 @@ export default function Home() {
 <aside
   className="cine-right"
   style={{
+    width: 280,                // mismo ancho para todo el bloque
+    justifySelf: "end",
     display: "flex",
     flexDirection: "column",
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
-    gap: 14,
+    alignItems: "center",      // ⬅️ centramos el eje
+    gap: 16,
     paddingTop: 18,
-    width: 260,              // ⬅️ mismo ancho que el logo
-    justifySelf: "end",
   }}
 >
   {/* Developed by */}
@@ -513,34 +512,33 @@ export default function Home() {
     style={{
       width: "100%",
       textAlign: "right",
-      opacity: 0.65,
-      fontWeight: 800,
       fontSize: 13,
-      paddingRight: 18,      // ⬅️ compensa el padding interno del PNG
+      fontWeight: 800,
+      opacity: 0.65,
     }}
   >
     Developed by
   </div>
 
-  {/* Logo */}
+  {/* LOGO */}
   <div
     style={{
       width: "100%",
       display: "flex",
-      justifyContent: "flex-end",
+      justifyContent: "center",   // ⬅️ centrado perfecto
     }}
   >
     <Image
       src="/ndigital.png"
       alt="N Digital"
-      width={260}
-      height={260}
+      width={240}
+      height={240}
       priority
       style={{
-        width: "100%",
+        width: 240,
         height: "auto",
         display: "block",
-        filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
+        filter: "drop-shadow(0 18px 45px rgba(0,0,0,0.55))",
       }}
     />
   </div>
@@ -550,11 +548,10 @@ export default function Home() {
     style={{
       width: "100%",
       textAlign: "right",
-      opacity: 0.60,
-      fontWeight: 800,
       fontSize: 13,
+      fontWeight: 800,
+      opacity: 0.60,
       marginTop: 6,
-      paddingRight: 18,     // ⬅️ alineado al borde visual del logo
     }}
   >
     Powered by
@@ -566,7 +563,6 @@ export default function Home() {
       textAlign: "right",
       fontWeight: 950,
       letterSpacing: 0.6,
-      paddingRight: 18,
     }}
   >
     CHATGPT
@@ -576,10 +572,9 @@ export default function Home() {
     style={{
       width: "100%",
       textAlign: "right",
-      opacity: 0.55,
-      fontWeight: 800,
       fontSize: 12,
-      paddingRight: 18,
+      fontWeight: 800,
+      opacity: 0.55,
     }}
   >
     OpenAI
