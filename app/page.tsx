@@ -125,8 +125,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 }
 
 export default function Home() {
-  // marcador para verificar deployment (debe cambiar en producción)
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V4";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-AUTO-V5";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -137,7 +136,6 @@ export default function Home() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // si quieres mantener confirmación BUY, ajusta aquí
   const BUY_MIN_SCORE = 80;
 
   async function loadSignal() {
@@ -146,7 +144,6 @@ export default function Home() {
       const s = await fetchJSON("/api/signal");
       const last = (s?.lastSignal ?? null) as SignalPayload | null;
 
-      // confirmación BUY (si score < BUY_MIN_SCORE, se muestra como NONE)
       if (last && last.action === "BUY" && Number(last.score) < BUY_MIN_SCORE) {
         setSignal({ ...last, action: "NONE", verdict: false });
       } else {
@@ -195,7 +192,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // dibujar velas
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -245,7 +241,6 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", ...bg, color: "#e5e7eb", fontFamily: "system-ui" }}>
-      {/* marker */}
       <div
         style={{
           position: "fixed",
@@ -260,7 +255,6 @@ export default function Home() {
         {DEPLOY_MARKER}
       </div>
 
-      {/* top flare line */}
       <div
         style={{
           position: "absolute",
@@ -276,14 +270,13 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* HEADER — 2 líneas, subtítulo más grande */}
         <header style={{ marginBottom: 26 }}>
           <div style={{ textAlign: "center" }}>
             <div
               style={{
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 22, // BTCALERT más pequeño
+                fontSize: 22,
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 textShadow: "0 0 26px rgba(245,179,1,0.18)",
@@ -298,7 +291,7 @@ export default function Home() {
                 marginTop: 10,
                 fontWeight: 980,
                 letterSpacing: 1,
-                fontSize: 42, // MONITOREO más grande
+                fontSize: 42,
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 color: "rgba(255,255,255,0.90)",
@@ -328,7 +321,6 @@ export default function Home() {
               overflow: "hidden",
             }}
           >
-            {/* glow inferior dorado */}
             <div
               style={{
                 position: "absolute",
@@ -341,7 +333,6 @@ export default function Home() {
               }}
             />
 
-            {/* TOP: IZQ + DERECHA */}
             <div
               className="cine-grid"
               style={{
@@ -355,7 +346,6 @@ export default function Home() {
             >
               {/* IZQUIERDA */}
               <div>
-                {/* top row */}
                 <div
                   style={{
                     display: "flex",
@@ -367,7 +357,6 @@ export default function Home() {
                 >
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      {/* ✅ DOT AUTOMÁTICO (sin círculo amarillo) */}
                       <span
                         style={{
                           display: "inline-block",
@@ -383,13 +372,9 @@ export default function Home() {
                               : "0 0 18px rgba(245,179,1,0.55)",
                         }}
                       />
-                      {/* ✅ Indicador MÁS GRANDE + COLOR AUTOMÁTICO */}
-                      <div style={{ fontWeight: 980, fontSize: 26, color: indicatorColor }}>
-                        {indicatorTitle}
-                      </div>
+                      <div style={{ fontWeight: 980, fontSize: 26, color: indicatorColor }}>{indicatorTitle}</div>
                     </div>
 
-                    {/* ✅ descripción MÁS GRANDE */}
                     <div style={{ marginTop: 10, opacity: 0.82, fontSize: 18.5, maxWidth: 720 }}>
                       {indicatorDesc}
                     </div>
@@ -401,7 +386,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* precio */}
                 <div
                   style={{
                     fontSize: 70,
@@ -418,12 +402,9 @@ export default function Home() {
                   {formatUSD(signal.price)}
                 </div>
 
-                {/* score */}
                 <div style={{ marginTop: 18 }}>
                   <div style={{ opacity: 0.68, marginBottom: 8, fontSize: 13.5 }}>Score</div>
-                  <div style={{ fontSize: 34, fontWeight: 900, marginBottom: 12 }}>
-                    {signal.score}/100
-                  </div>
+                  <div style={{ fontSize: 34, fontWeight: 900, marginBottom: 12 }}>{signal.score}/100</div>
 
                   <div
                     style={{
@@ -444,7 +425,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* métricas */}
                 <div
                   style={{
                     marginTop: 20,
@@ -490,22 +470,21 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* DERECHA
-                  ✅ “letras alineadas con el logo”:
-                  - el bloque completo se pega a la derecha (marginLeft:auto)
-                  - dentro del bloque TODO se alinea al mismo borde izquierdo del logo
+              {/* DERECHA (FIX REAL):
+                  ✅ Empuja el bloque COMPLETO al borde derecho del panel: justifySelf:"end"
+                  ✅ Mantiene textos alineados al borde del logo: alignItems:"flex-start"
               */}
               <aside
                 className="cine-right"
                 style={{
+                  width: rightW,
+                  justifySelf: "end", // ✅ ESTO es lo que lo pega a la derecha
                   display: "flex",
                   flexDirection: "column",
-                  alignItems: "flex-start", // ✅ textos alineados al borde del logo
+                  alignItems: "flex-start",
                   justifyContent: "flex-start",
                   gap: 14,
-                  paddingTop: 24, // ✅ Developed by un poco más abajo (4–6px aprox)
-                  width: rightW,
-                  marginLeft: "auto", // ✅ bloque pegado a la derecha del panel
+                  paddingTop: 24,
                 }}
               >
                 <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
@@ -526,11 +505,8 @@ export default function Home() {
                   />
                 </div>
 
-                {/* ✅ más aire entre logo y Powered by */}
-                <div style={{ opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 12 }}>Powered by</div>
-
+                <div style={{ opacity: 0.6, fontWeight: 800, fontSize: 13, marginTop: 12 }}>Powered by</div>
                 <div style={{ fontWeight: 950, letterSpacing: 0.6 }}>CHATGPT</div>
-
                 <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12 }}>OpenAI</div>
               </aside>
             </div>
@@ -582,9 +558,7 @@ export default function Home() {
               </div>
             </div>
 
-            {/* responsive + animación sutil */}
             <style jsx>{`
-              /* ✅ fade sutil del logo (pro) */
               .nd-logo {
                 opacity: 0.96;
                 animation: ndFade 5.6s ease-in-out infinite;
@@ -613,8 +587,8 @@ export default function Home() {
                   grid-template-columns: 1fr !important;
                 }
                 .cine-right {
-                  margin-left: 0 !important;
                   width: 100% !important;
+                  justify-self: auto !important;
                   align-items: flex-start !important;
                   padding-top: 10px !important;
                 }
