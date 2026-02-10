@@ -301,9 +301,15 @@ export async function POST(req: Request) {
           : "🟢 ES BUENA OPORTUNIDAD PARA COMPRAR 🟢";
 
       const ahora = new Date();
-      const hora = ahora.toLocaleTimeString("en-US");
-      const fecha = ahora.toLocaleDateString("en-US");
 
+const hora = ahora.toLocaleTimeString("en-US", {
+  timeZone: "America/New_York",
+});
+
+const fecha = ahora.toLocaleDateString("en-US", {
+  timeZone: "America/New_York",
+});
+      
       // Solo 3 motivos
       const motivos = reasons.slice(0, 3);
       const motivoTxt =
