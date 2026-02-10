@@ -494,60 +494,98 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* DERECHA (flush right REAL) */}
-              <aside
-                className="cine-right"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-end",
-                  justifyContent: "flex-start",
-                  gap: 14,
-                  paddingTop: 18,
-                  justifySelf: "end",
-                  marginRight: -2, // micro-ajuste del bloque a la derecha
-                }}
-              >
-                <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13 }}>
-                  Developed by
-                </div>
+              {/* DERECHA */}
+<aside
+  className="cine-right"
+  style={{
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    gap: 14,
+    paddingTop: 18,
+    width: 260,              // ⬅️ mismo ancho que el logo
+    justifySelf: "end",
+  }}
+>
+  {/* Developed by */}
+  <div
+    style={{
+      width: "100%",
+      textAlign: "right",
+      opacity: 0.65,
+      fontWeight: 800,
+      fontSize: 13,
+      paddingRight: 18,      // ⬅️ compensa el padding interno del PNG
+    }}
+  >
+    Developed by
+  </div>
 
-                {/* ✅ EMPUJE VISUAL DEL LOGO (por aire transparente del PNG) */}
-                <div
-                  style={{
-                    width: 300,
-                    display: "flex",
-                    justifyContent: "flex-end",
-                  }}
-                >
-                  <Image
-                    src="/ndigital.png"
-                    alt="N Digital"
-                    width={350}
-                    height={350}
-                    priority
-                    style={{
-                      width: "100%",
-                      height: "auto",
-                      display: "block",
-                      marginRight: -50, // ⬅️ AJUSTA ESTE VALOR si quieres más/menos (ej: -10, -22)
-                      filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
-                    }}
-                  />
-                </div>
+  {/* Logo */}
+  <div
+    style={{
+      width: "100%",
+      display: "flex",
+      justifyContent: "flex-end",
+    }}
+  >
+    <Image
+      src="/ndigital.png"
+      alt="N Digital"
+      width={260}
+      height={260}
+      priority
+      style={{
+        width: "100%",
+        height: "auto",
+        display: "block",
+        filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.55))",
+      }}
+    />
+  </div>
 
-                <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 6 }}>
-                  Powered by
-                </div>
+  {/* Powered by */}
+  <div
+    style={{
+      width: "100%",
+      textAlign: "right",
+      opacity: 0.60,
+      fontWeight: 800,
+      fontSize: 13,
+      marginTop: 6,
+      paddingRight: 18,     // ⬅️ alineado al borde visual del logo
+    }}
+  >
+    Powered by
+  </div>
 
-                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.5 }}>
-                  CHATGPT
-                </div>
+  <div
+    style={{
+      width: "100%",
+      textAlign: "right",
+      fontWeight: 950,
+      letterSpacing: 0.6,
+      paddingRight: 18,
+    }}
+  >
+    CHATGPT
+  </div>
 
-                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 800, fontSize: 12 }}>
-                  OpenAI
-                </div>
-              </aside>
+  <div
+    style={{
+      width: "100%",
+      textAlign: "right",
+      opacity: 0.55,
+      fontWeight: 800,
+      fontSize: 12,
+      paddingRight: 18,
+    }}
+  >
+    OpenAI
+  </div>
+</aside>
+
             </div>
 
             {/* GRAFICO FULL WIDTH */}
