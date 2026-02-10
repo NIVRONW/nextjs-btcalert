@@ -257,14 +257,15 @@ export default function Home() {
       />
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "54px 18px 64px" }}>
-        {/* ✅ HEADER — AHORA CENTRADO EN 2 LINEAS */}
+        {/* ✅ HEADER — 2 líneas, intercambiando tamaños */}
         <header style={{ marginBottom: 26 }}>
           <div style={{ textAlign: "center" }}>
+            {/* BTCALERT más pequeño */}
             <div
               style={{
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 40,
+                fontSize: 28,
                 lineHeight: 1.05,
                 textTransform: "uppercase",
                 textShadow: "0 0 26px rgba(245,179,1,0.18)",
@@ -274,15 +275,17 @@ export default function Home() {
               ₿ BTCALERT
             </div>
 
+            {/* TÍTULO principal mucho más grande */}
             <div
               style={{
                 marginTop: 10,
                 fontWeight: 950,
                 letterSpacing: 1,
-                fontSize: 30, // ✅ subtítulo más grande
-                lineHeight: 1.1,
+                fontSize: 46,
+                lineHeight: 1.08,
                 textTransform: "uppercase",
-                color: "rgba(255,255,255,0.88)",
+                color: "rgba(255,255,255,0.92)",
+                textShadow: "0 0 22px rgba(0,0,0,0.35)",
               }}
             >
               MONITOREO Y ALERTA DE INVERSION
@@ -321,7 +324,7 @@ export default function Home() {
               }}
             />
 
-            {/* ✅ SOLO TOP: IZQ + DERECHA */}
+            {/* TOP: IZQ + DERECHA */}
             <div
               className="cine-grid"
               style={{
@@ -357,14 +360,31 @@ export default function Home() {
                           boxShadow: "0 0 14px rgba(245,179,1,0.55)",
                         }}
                       />
-                      {/* ✅ Indicador MÁS GRANDE */}
-                      <div style={{ fontWeight: 950, fontSize: 24, color: gold }}>
-                        Sin señal clara
+
+                      {/* ✅ Indicador MÁS GRANDE + emoji */}
+                      <div
+                        style={{
+                          fontWeight: 950,
+                          fontSize: 32,
+                          color: gold,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        🟡 Sin señal clara
                       </div>
                     </div>
 
                     {/* ✅ descripción MÁS GRANDE */}
-                    <div style={{ marginTop: 10, opacity: 0.78, fontSize: 18, maxWidth: 700 }}>
+                    <div
+                      style={{
+                        marginTop: 10,
+                        opacity: 0.82,
+                        fontSize: 20,
+                        fontWeight: 600,
+                        maxWidth: 760,
+                        lineHeight: 1.35,
+                      }}
+                    >
                       El mercado no muestra una oportunidad sólida ahora mismo.
                     </div>
                   </div>
@@ -430,29 +450,23 @@ export default function Home() {
                 >
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>RSI (14)</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {signal.rsi14.toFixed(2)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{signal.rsi14.toFixed(2)}</div>
                     <div style={{ opacity: 0.55, marginTop: 6, fontSize: 12.5 }}>
                       1h:{" "}
-                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"}{" "}
-                      • 24h:{" "}
+                      {signal.change1h != null ? `${signal.change1h > 0 ? "+" : ""}${signal.change1h.toFixed(2)}%` : "—"} •
+                      24h:{" "}
                       {signal.change24h != null ? `${signal.change24h > 0 ? "+" : ""}${signal.change24h.toFixed(2)}%` : "—"}
                     </div>
                   </div>
 
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>EMA 50</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {formatUSD(signal.ema50)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{formatUSD(signal.ema50)}</div>
                   </div>
 
                   <div>
                     <div style={{ opacity: 0.62, fontSize: 12.5 }}>EMA 200</div>
-                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>
-                      {formatUSD(signal.ema200)}
-                    </div>
+                    <div style={{ fontWeight: 900, fontSize: 28, marginTop: 6 }}>{formatUSD(signal.ema200)}</div>
                   </div>
 
                   <div style={{ textAlign: "right" }}>
@@ -464,7 +478,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* DERECHA (alineada perfecta) */}
+              {/* ✅ DERECHA (alineación perfecta a la derecha) */}
               <aside
                 className="cine-right"
                 style={{
@@ -472,13 +486,12 @@ export default function Home() {
                   flexDirection: "column",
                   alignItems: "flex-end",
                   justifyContent: "flex-start",
-                  gap: 14,
-                  paddingTop: 18,
+                  gap: 10,
+                  paddingTop: 10,
+                  textAlign: "right",
                 }}
               >
-                <div style={{ textAlign: "right", opacity: 0.65, fontWeight: 800, fontSize: 13 }}>
-                  Developed by
-                </div>
+                <div style={{ opacity: 0.65, fontWeight: 800, fontSize: 13 }}>Developed by</div>
 
                 <div
                   style={{
@@ -486,6 +499,7 @@ export default function Home() {
                     maxWidth: "100%",
                     display: "flex",
                     justifyContent: "flex-end",
+                    alignItems: "flex-end",
                     marginTop: 2,
                   }}
                 >
@@ -503,21 +517,15 @@ export default function Home() {
                   />
                 </div>
 
-                <div style={{ textAlign: "right", opacity: 0.60, fontWeight: 800, fontSize: 13, marginTop: 6 }}>
-                  Powered by
-                </div>
+                <div style={{ opacity: 0.6, fontWeight: 800, fontSize: 13, marginTop: 6 }}>Powered by</div>
 
-                <div style={{ textAlign: "right", fontWeight: 950, letterSpacing: 0.6 }}>
-                  CHATGPT
-                </div>
+                <div style={{ fontWeight: 950, letterSpacing: 0.6 }}>CHATGPT</div>
 
-                <div style={{ textAlign: "right", opacity: 0.55, fontWeight: 800, fontSize: 12 }}>
-                  OpenAI
-                </div>
+                <div style={{ opacity: 0.55, fontWeight: 800, fontSize: 12 }}>OpenAI</div>
               </aside>
             </div>
 
-            {/* ✅ AHORA EL GRAFICO VA FULL WIDTH (DE IZQ A DER) */}
+            {/* ✅ GRAFICO FULL WIDTH */}
             <div style={{ marginTop: 18, position: "relative", zIndex: 1 }}>
               <div style={{ fontWeight: 950, marginBottom: 10, color: gold, fontSize: 18 }}>
                 Gráfico de velas (últimas 72 horas)
@@ -572,6 +580,7 @@ export default function Home() {
                 }
                 .cine-right {
                   align-items: flex-start !important;
+                  text-align: left !important;
                   padding-top: 10px !important;
                 }
               }
