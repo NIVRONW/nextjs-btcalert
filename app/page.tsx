@@ -126,7 +126,7 @@ function drawCandles(canvas: HTMLCanvasElement, candles: Candle[]) {
 
 export default function Home() {
   // marcador para verificar deployment (debe cambiar en producción)
-  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-EXACT-V2";
+  const DEPLOY_MARKER = "BTCALERT-CINEMATIC-EXACT-V1";
 
   const [signal, setSignal] = useState<SignalPayload | null>(null);
   const [status, setStatus] = useState<Status>("loading");
