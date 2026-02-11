@@ -1,24 +1,19 @@
 export const dynamic = "force-dynamic";
 
+/** Respuesta JSON */
 function json(data: any, status = 200) {
   return Response.json(data, { status });
 }
 
+/** Lee token Bearer */
 function getBearer(req: Request) {
   const auth = req.headers.get("authorization") || "";
   if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
   return "";
 }
 
-async function tgGetMe(token: string) {
-  const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
-    cache: "no-store",
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, data };
-}
-
-async function tgSend(token: string, chatId: string, text: string) {
+/** Enviar Telegram (HTML o texto simple) */
+async function sendTelegram(token: string, chatId: string, text: string) {
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -28,48 +23,65 @@ async function tgSend(token: string, chatId: string, text: string) {
       disable_web_page_preview: true,
     }),
   });
+
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
 export async function POST(req: Request) {
   try {
-    // ✅ proteger como cron
+    // ✅ AUTH: Bearer CRON_SECRET
     const expected = (process.env.CRON_SECRET || "").trim();
     const provided = getBearer(req);
+
     if (!expected || provided !== expected) {
-      return json({ ok: false, error: "Unauthorized", build: "TELEGRAM-TEST-V1" }, 401);
+      return json({ ok: false, error: "Unauthorized", build: "TELEGRAM-TEST-V2" }, 401);
     }
 
-    const token = process.env.TELEGRAM_BOT_TOKEN || "";
-    const chatId = process.env.TELEGRAM_CHAT_ID || "";
+    // ✅ LEE SOLO ESTO (la variable correcta)
+    const token = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    const chatId = (process.env.TELEGRAM_CHAT_ID || "").trim();
 
-    if (!token) return json({ ok: false, error: "Missing TELEGRAM_BOT_TOKEN", build: "TELEGRAM-TEST-V1" }, 500);
-    if (!chatId) return json({ ok: false, error: "Missing TELEGRAM_CHAT_ID", build: "TELEGRAM-TEST-V1" }, 500);
+    // 👇 diagnóstico adicional (para cazar “variable equivocada”)
+    const debug = {
+      TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID ?? null,
+      TELEGRAM_CHAT_ID_len: (process.env.TELEGRAM_CHAT_ID || "").length,
+      TELEGRAM_CHAT_ID_trim: chatId,
 
-    const me = await tgGetMe(token);
+      TELEGRAM_CHATID: (process.env as any).TELEGRAM_CHATID ?? null,
+      TELEGRAM_GROUP_ID: (process.env as any).TELEGRAM_GROUP_ID ?? null,
+      TELEGRAM_CHAT: (process.env as any).TELEGRAM_CHAT ?? null,
+    };
 
-    const msg = `TEST BTCALERT ✅ (desde Vercel)\nChatId: ${chatId}\nFecha: ${new Date().toLocaleString("en-US")}`;
-    const sent = await tgSend(token, chatId, msg);
+    if (!token) {
+      return json({ ok: false, error: "Missing TELEGRAM_BOT_TOKEN", build: "TELEGRAM-TEST-V2", debug }, 500);
+    }
+    if (!chatId) {
+      return json({ ok: false, error: "Missing TELEGRAM_CHAT_ID", build: "TELEGRAM-TEST-V2", debug }, 500);
+    }
 
-    return json({
-      ok: true,
-      build: "TELEGRAM-TEST-V1",
-      envChatId: chatId,
-      bot: {
-        ok: me.ok,
-        status: me.status,
-        username: me?.data?.result?.username ?? null,
-        first_name: me?.data?.result?.first_name ?? null,
+    const msg =
+      `✅ TEST BTCALERT (grupo)\n` +
+      `chat_id=${chatId}\n` +
+      `hora=${new Date().toLocaleString("en-US")}`;
+
+    const send = await sendTelegram(token, chatId, msg);
+
+    return json(
+      {
+        ok: true,
+        build: "TELEGRAM-TEST-V2",
+        envChatId: chatId,
+        send,
+        debug,
       },
-      send: sent, // ✅ trae el error real si falla
-    });
+      200
+    );
   } catch (e: any) {
-    return json({ ok: false, error: e?.message ?? "error", build: "TELEGRAM-TEST-V1" }, 500);
+    return json({ ok: false, error: e?.message ?? "telegram_test_error", build: "TELEGRAM-TEST-V2" }, 500);
   }
 }
 
 export async function GET(req: Request) {
   return POST(req);
 }
-
